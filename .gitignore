@@ -1,0 +1,14 @@
+# Artefatos gerados por tools/build-inline.ps1 (existem so para o preview do
+# Claude Code; o Conversor-ONR.html, que e o entregavel, fica versionado).
+_*.html
+
+# Configuracao local de permissoes do Claude Code
+.claude/settings.local.json
+
+# --------------------------------------------------------------------------
+# NAO PUBLICAR: dados pessoais reais (LGPD).
+# A suite de testes e calibrada sobre matriculas reais do acervo - nomes, CPF,
+# CNPJ e enderecos de pessoas identificadas. Fica so na maquina da serventia.
+# O Conversor-ONR.html tambem sai de fora porque embute essas fixtures.
+tests/
+Conversor-ONR.html
