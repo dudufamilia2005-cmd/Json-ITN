@@ -129,6 +129,22 @@
         }
       }
 
+      // Averbacao de mudanca de nome de rua: "o logradouro publico que ate entao
+      // denominava-se 'Avenida H' [...] passou a denominar-se 'Avenida Tenente
+      // Santana'". Vale o nome NOVO - o da abertura ja nao existe.
+      if (urbano) {
+        const novo = X.extraiNovoLogradouro(b.texto);
+        if (novo) {
+          vigente.endereco.logradouro = novo.valor;
+          anota('endereco_logradouro', novo, b.rotulo);
+          const tipo = X.tipoDeLogradouro(novo.valor);
+          if (tipo) {
+            vigente.endereco.tipo_logradouro = tipo.valor;
+            anota('endereco_tipo_logradouro', tipo, b.rotulo);
+          }
+        }
+      }
+
       const confs = X.extraiConfrontantes(b.texto);
       if (confs.length) vigente.confrontantes = confs.map((c) => Object.assign({ ato: b.rotulo }, c));
 
@@ -339,6 +355,7 @@
     estado.numeroAssumido = false;
     estado.tipoLogradouroAssumido = false;
     estado.situacaoEncerrada = null;
+    estado.cortados = [];
     const doc = P.separaDocumento(texto);
     estado.atos = doc.atos;
     estado.preambulo = doc.preambulo;
@@ -443,6 +460,18 @@
         end.numero_logradouro = 'S/N';
         estado.numeroAssumido = true;
       }
+      // Limite de tamanho do schema: um caractere a mais reprova o arquivo
+      // inteiro. Corta na ultima palavra que couber, e diz na tela que cortou -
+      // um nome de bairro cortado ainda identifica o lugar; vazio, nao.
+      estado.cortados = [];
+      for (const [k, limite] of [['logradouro', 150], ['bairro', 50], ['complemento', 100]]) {
+        if (typeof end[k] === 'string' && end[k].length > limite) {
+          const antes = end[k];
+          end[k] = X.cortaEm(antes, limite);
+          estado.cortados.push({ campo: k, limite, antes, depois: end[k] });
+        }
+      }
+
       // O tipo do logradouro pode nao estar no glossario ("Rua 06" esta; "Quadra
       // 11" nao). Sem ele o arquivo e reprovado - 177 e "Nao Especificado".
       if (end.logradouro && end.tipo_logradouro == null) {
@@ -877,8 +906,12 @@
       campoEnd.push(linha('numero_logradouro', campoTexto(end.numero_logradouro, (v) => { end.numero_logradouro = v; }),
         estado.numeroAssumido ? 'assumido "S/N": a descricao nao traz numero na via'
           : provaVigente('endereco_numero_logradouro')));
+      const corteBairro = (estado.cortados || []).find((c) => c.campo === 'bairro');
       campoEnd.push(linha('bairro', campoTexto(end.bairro, (v) => { end.bairro = v; }),
-        provaVigente('endereco_bairro')));
+        corteBairro
+          ? 'cortado em ' + corteBairro.limite + ' caracteres (o schema nao aceita mais): "'
+            + corteBairro.antes + '"'
+          : provaVigente('endereco_bairro')));
     }
     campoEnd.push(linha('complemento', campoTexto(end.complemento, (v) => { end.complemento = v; }),
       provaVigente('endereco_complemento')));

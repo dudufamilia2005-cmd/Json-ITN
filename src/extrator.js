@@ -740,6 +740,41 @@
     'estrada', 'viela', 'beco', 'largo', 'via', 'marginal', 'anel', 'ladeira',
     'passagem', 'servidao', 'viaduto', 'caminho', 'esplanada', 'parque'];
 
+  /**
+   * Corta um texto no limite que o schema aceita, preferindo a ultima palavra
+   * inteira. O ONR reprova o arquivo por um caractere a mais, e um nome de
+   * bairro cortado ainda identifica o lugar - vazio nao identifica nada.
+   */
+  function cortaEm(texto, limite) {
+    const t = String(texto || '');
+    if (t.length <= limite) return t;
+    const cortado = t.slice(0, limite);
+    const espaco = cortado.lastIndexOf(' ');
+    return (espaco > limite * 0.6 ? cortado.slice(0, espaco) : cortado).replace(/[\s,;.-]+$/, '');
+  }
+
+  /** O numero do glossario correspondente a primeira palavra do logradouro. */
+  function tipoDeLogradouro(nomeVia) {
+    const primeira = chave(String(nomeVia || '').trim().split(/\s+/)[0] || '').replace(/\./g, '');
+    const tipo = TIPO_LOGRADOURO_TEXTO[primeira];
+    return tipo ? achado(tipo, primeira, 'tipo pela palavra "' + primeira + '"') : null;
+  }
+
+  /**
+   * Averbacao de alteracao de nome de logradouro publico (art. 167, II, 13):
+   * "o logradouro publico que ate entao denominava-se 'Avenida H' [...] passou a
+   * denominar-se 'Avenida Tenente Santana'". O endereco do imovel passa a ser o
+   * nome NOVO - manter o da abertura e mandar ao ONR uma rua que nao existe mais.
+   */
+  function extraiNovoLogradouro(textoAto) {
+    const t = compacta(textoAto);
+    if (!/logradouro/i.test(t)) return null;
+    const m = t.match(/passou?\s+a\s+(?:se\s+)?denominar(?:-se)?\s*:?\s*["“']([^"“”']{3,150})["”']/i)
+      || t.match(/passou?\s+a\s+(?:se\s+)?denominar(?:-se)?\s+([A-ZÀ-Ý][^.,;]{3,80})/);
+    if (!m) return null;
+    return achado(cortaEm(compacta(m[1]), 150), m[0], 'novo nome do logradouro (averbacao)');
+  }
+
   function extraiEndereco(texto) {
     const t = compacta(texto);
     const out = {};
@@ -807,8 +842,16 @@
     // Bairro: "Setor X", "Jardim Y", "Loteamento Z" no restante da descricao.
     const depois = bruto.slice(achouVia.m.index);
     const mBairro = depois.match(/((?:Setor|Jardim|Bairro|Vila|Parque|Residencial|Distrito|Conjunto|Cohab|Loteamento|Chac[áa]ra|Centro)[^,;]{0,60}(?:,\s*\d[ªa]?\s*Etapa)?)/i);
-    if (mBairro) out.bairro = achado(compacta(mBairro[1]).replace(/[,;]+$/, ''), mBairro[0], 'bairro');
-    else if (/Centro/i.test(depois)) out.bairro = achado('Centro', 'Centro', 'bairro');
+    if (mBairro) {
+      let nomeBairro = compacta(mBairro[1]).replace(/[,;]+$/, '');
+      // O loteamento costuma vir com o nome entre aspas: "do loteamento
+      // residencial "Vila Santos Dumont II Etapa"". O bairro e o que esta
+      // DENTRO das aspas - o resto e rotulo, e ainda estoura os 50 caracteres
+      // que o schema aceita.
+      const mAspas = nomeBairro.match(/["“”']([^"“”']{3,60})["“”']/);
+      if (mAspas) nomeBairro = compacta(mAspas[1]);
+      out.bairro = achado(cortaEm(nomeBairro, 50), mBairro[0], 'bairro');
+    } else if (/Centro/i.test(depois)) out.bairro = achado('Centro', 'Centro', 'bairro');
 
     // Quadra/lote so valem dentro da DESCRICAO do imovel: o endereco do
     // proprietario tambem tem "Quadra 37, Lote 30" e nao e deste imovel.
@@ -1040,6 +1083,9 @@
     extraiConfrontantes,
     extraiGeo,
     extraiMunicipio,
+    extraiNovoLogradouro,
+    tipoDeLogradouro,
+    cortaEm,
     MUNICIPIOS,
     _internos: { dataDeTexto, numeroBR, nomeAntesDe, regimeBensDe, estadoCivilDe },
   };
