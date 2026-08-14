@@ -106,12 +106,15 @@
       ato: 4, alteracao_titularidade: 1, rotulo: 'compra e venda' },
     { re: /(inventario\/partilha|formal de partilha|adjudicacao|arrolamento dos bens)/,
       ato: 4, alteracao_titularidade: 9, rotulo: 'partilha/adjudicacao por obito' },
-    // Divisao amigavel extingue o condominio: cada condomino passa a ser dono
-    // exclusivo da sua parte. E transmissao (o quinhao dos outros muda de mao)
-    // e nao tem item proprio no enum - 16 e "outras nao onerosas". Precisa vir
-    // antes de "desmembramento", que costuma aparecer no mesmo ato.
-    { re: /divisao amigavel/, ato: 4, alteracao_titularidade: 16,
-      rotulo: 'divisao amigavel (extincao de condominio)' },
+    // Divisao amigavel e transmissao SO quando atribui a alguem ("coube
+    // exclusivamente aos condominos: X e Y"): ali o quinhao dos outros muda de
+    // mao, e o enum nao tem item proprio - 16 e "outras nao onerosas".
+    // A divisao que apenas parte o imovel em glebas e encerra a matricula
+    // (AV.51 da 1.999, "DIVISAO AMIGAVEL/DESMEMBRAMENTO") nao transmite nada:
+    // cai na regra de desmembramento, ato 5, e nao pede valor_transacao.
+    { re: /divisao amigavel[\s\S]{0,3000}?(coube|couberam|cabendo)/,
+      ato: 4, alteracao_titularidade: 16,
+      rotulo: 'divisao amigavel com atribuicao de quinhao' },
     { re: /partilha por divorcio/, ato: 4, alteracao_titularidade: 10 },
     { re: /dissolucao de uniao estavel/, ato: 4, alteracao_titularidade: 11 },
     { re: /(doacao|escritura publica de doacao)/, ato: 4, alteracao_titularidade: 6 },

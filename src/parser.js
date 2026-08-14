@@ -134,21 +134,22 @@
   }
 
   /**
-   * A abertura da matricula e, ela mesma, um ato registravel ("ato: 1") quando
-   * traz os elementos de um: data e protocolo proprios. E o caso das matriculas
-   * abertas por desmembramento, retificacao ou mutacao de transcricao - nelas a
-   * abertura costuma ser justamente o ato a comunicar ao ONR.
+   * A abertura da matricula e, ela mesma, um ato registravel ("ato: 1"): e o
+   * primeiro ato do folio real, com data propria. Basta que o preambulo traga o
+   * que faz dele uma abertura - a descricao do imovel (ou a titularidade) e uma
+   * data. Nos livros antigos nao ha protocolo nem selo escritos, e mesmo assim a
+   * abertura e ato; o protocolo so e exigido pelo layout quando motivo_envio = 1.
    *
-   * Sem data nem protocolo, o preambulo e so a descricao herdada do registro
-   * anterior, e nao vira ato.
+   * Fica de fora o preambulo que nao descreve nada nem tem data - continuacao de
+   * folha, cabecalho solto, texto truncado.
    */
   function aberturaEhAto(preambulo) {
     const t = String(preambulo || '').replace(/\s+/g, ' ');
-    if (!t.trim()) return false;
-    const temProtocolo = /Protocolo\s*(?:n\.?º|n[ºo°]|:)/i.test(t);
-    const temSelo = /Selo\s*:/i.test(t);
-    const temFecho = /(DOU F[ÉE]|Cota[çc][ãa]o do ato|Oficial\s*:)/i.test(t);
-    return temProtocolo && (temSelo || temFecho);
+    if (t.trim().length < 60) return false;
+    const descreve = /IM[ÓO]VEL\s*:|PROPRIET[ÁA]RI|T[ÍI]TULO\s+AQUISITIVO/i.test(t);
+    const temData = /\d{1,2}\s+de\s+[A-Za-zçãé]+\s+de\s+\d{4}/i.test(t)
+      || /\b\d{2}[./]\d{2}[./]\d{4}\b/.test(t);
+    return descreve && temData;
   }
 
   /**
