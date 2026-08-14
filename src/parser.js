@@ -131,12 +131,48 @@
   }
 
   /**
+   * A abertura da matricula e, ela mesma, um ato registravel ("ato: 1") quando
+   * traz os elementos de um: data e protocolo proprios. E o caso das matriculas
+   * abertas por desmembramento, retificacao ou mutacao de transcricao - nelas a
+   * abertura costuma ser justamente o ato a comunicar ao ONR.
+   *
+   * Sem data nem protocolo, o preambulo e so a descricao herdada do registro
+   * anterior, e nao vira ato.
+   */
+  function aberturaEhAto(preambulo) {
+    const t = String(preambulo || '').replace(/\s+/g, ' ');
+    if (!t.trim()) return false;
+    const temProtocolo = /Protocolo\s*(?:n\.?º|n[ºo°]|:)/i.test(t);
+    const temSelo = /Selo\s*:/i.test(t);
+    const temFecho = /(DOU F[ÉE]|Cota[çc][ãa]o do ato|Oficial\s*:)/i.test(t);
+    return temProtocolo && (temSelo || temFecho);
+  }
+
+  /**
    * Documento completo: preambulo (abertura da matricula) + atos.
    * O preambulo nao vira item de `imoveis`, mas alimenta o estado vigente.
    */
   function separaDocumento(textoIntegral) {
     const atos = separaAtos(textoIntegral);
-    return { preambulo: atos.preambulo || '', atos: Array.prototype.slice.call(atos) };
+    const preambulo = atos.preambulo || '';
+    const lista = Array.prototype.slice.call(atos);
+
+    // Abertura com data e protocolo entra na lista como o primeiro ato, para
+    // poder ser exportada. Fica com numero "0": o ONR nao define numeracao para
+    // a abertura, e o campo e editavel na tela.
+    if (aberturaEhAto(preambulo)) {
+      lista.unshift({
+        indice: -1,
+        numero: '0',
+        matricula: (lista[0] || {}).matricula || null,
+        tipo: 1,
+        tipoRotulo: 'Registro',
+        cabecalho: 'Abertura da matricula',
+        texto: preambulo,
+        ehAbertura: true,
+      });
+    }
+    return { preambulo, atos: lista };
   }
 
   function cortaPorCabecalho(linhas) {
@@ -228,6 +264,7 @@
   global.ONR_PARSER = {
     separaAtos,
     separaDocumento,
+    aberturaEhAto,
     extraiCampos,
     motivoEnvio,
     CORTE_ITN,

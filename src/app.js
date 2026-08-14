@@ -95,7 +95,7 @@
       const cad = X.extraiCadastros(b.texto);
       const campos = urbano
         ? ['cib', 'cif', 'cep', 'nome_imovel']
-        : ['car', 'cib', 'nirf', 'ccir', 'cod_sncr', 'cep', 'nome_imovel'];
+        : ['car', 'cib', 'nirf', 'ccir', 'cod_sncr', 'codigo_incra', 'cep', 'nome_imovel'];
       for (const k of campos) anota(k, cad[k], b.rotulo);
 
       const geo = X.extraiGeo(b.texto);
@@ -298,6 +298,8 @@
     const blocos = [];
     if (doc.preambulo) blocos.push({ rotulo: 'abertura', texto: doc.preambulo });
     for (const a of estado.atos) {
+      // A abertura ja entrou como bloco: nao contar duas vezes.
+      if (a.ehAbertura) continue;
       blocos.push({ rotulo: (a.tipo === 1 ? 'R.' : 'AV.') + a.numero, texto: a.texto });
     }
     const vigente = apuraVigente(blocos, $('#municipio').value);
@@ -337,7 +339,11 @@
         estado.cnmCalculado = calculado;
       }
     }
-    for (const k of urbano ? ['cif', 'cib', 'nome_imovel'] : ['car', 'ccir', 'cod_sncr', 'cib', 'nome_imovel']) {
+    // codigo_incra: o numero da certificacao do INCRA, exigido pela regra sempre
+    // que certificacao_incra = true. Vem da abertura ("certificacao n.º <uuid>")
+    // e vale para o documento inteiro, como os demais cadastros.
+    for (const k of urbano ? ['cif', 'cib', 'nome_imovel']
+      : ['car', 'ccir', 'cod_sncr', 'codigo_incra', 'cib', 'nome_imovel']) {
       if (v(k)) f[k] = v(k);
     }
     if (v('nome_imovel')) f.imovel_possui_nome = true;
@@ -392,14 +398,21 @@
     for (const a of estado.atos) {
       const e = X.extraiAto(a.texto);
       const pega = (x) => (x ? x.valor : null);
-      const rotuloAto = (a.tipo === 1 ? 'R.' : 'AV.') + a.numero;
+      const rotuloAto = a.ehAbertura ? 'Abertura' : (a.tipo === 1 ? 'R.' : 'AV.') + a.numero;
       estado.fichasAto[a.numero] = {
+        ehAbertura: !!a.ehAbertura,
         numero_ato: a.numero,
         tipo_ato: a.tipo,
-        data_ato: pega(e.data_ato),
-        ato: pega(e.ato),
-        alteracao_titularidade: pega(e.alteracao_titularidade),
-        alteracao_imovel: pega(e.alteracao_imovel),
+        // Na abertura a data nao esta no cabecalho e sim no fecho ("Morrinhos-GO,
+        // 12 de agosto de 2026") ou no protocolo - a mesma regra da abertura da
+        // matricula.
+        data_ato: pega(e.data_ato)
+          || (a.ehAbertura ? pega(X.extraiAbertura(a.texto).data_matricula) : null),
+        // A abertura e sempre "1: Abertura de matricula", independentemente do
+        // que o texto da descricao mencione.
+        ato: a.ehAbertura ? 1 : pega(e.ato),
+        alteracao_titularidade: a.ehAbertura ? null : pega(e.alteracao_titularidade),
+        alteracao_imovel: a.ehAbertura ? null : pega(e.alteracao_imovel),
         valor_transacao: pega(e.valor_transacao),
         valor_imposto: pega(e.valor_imposto),
         base_calculo_itbi: pega(e.base_calculo_itbi),
@@ -561,8 +574,8 @@
       });
       corpo.appendChild(el('tr', {}, [
         el('td', {}, [chk]),
-        el('td', { textContent: (a.tipo === 1 ? 'R.' : 'AV.') + a.numero }),
-        el('td', { textContent: a.tipoRotulo }),
+        el('td', { textContent: a.ehAbertura ? 'Abertura' : (a.tipo === 1 ? 'R.' : 'AV.') + a.numero }),
+        el('td', { textContent: a.ehAbertura ? 'Abertura de matricula' : a.tipoRotulo }),
         el('td', { textContent: ficha.data_ato || '(pendente)', className: ficha.data_ato ? '' : 'alerta' }),
         el('td', { textContent: motivo === null ? '(sem data)' : motivo + ' - ' + E.rotulo('motivo_envio', motivo),
           className: motivo === null ? 'alerta' : '' }),
@@ -606,6 +619,7 @@
     linhaV('CEP', 'cep');
     linhaV('Georreferenciado', 'georreferenciamento');
     linhaV('Certificacao INCRA', 'certificacao_incra');
+    linhaV('Codigo INCRA (certificacao)', 'codigo_incra');
     linhaV('Centroide (CAR)', 'centroide');
     alvo.appendChild(ul);
 
@@ -828,7 +842,7 @@
       const bloco = el('details', { className: 'ato', open: escolhidos.length <= 3 });
       const motivo = P.motivoEnvio(fa.data_ato);
       bloco.appendChild(el('summary', {}, [
-        el('b', { textContent: (a.tipo === 1 ? 'R.' : 'AV.') + a.numero }),
+        el('b', { textContent: a.ehAbertura ? 'Abertura da matricula' : (a.tipo === 1 ? 'R.' : 'AV.') + a.numero }),
         ' - ' + (fa.data_ato || 'sem data') + ' - motivo_envio '
         + (motivo === null ? '?' : motivo) + (fa.ato ? ' - ato ' + fa.ato : ' - ato nao classificado'),
       ]));
@@ -996,7 +1010,8 @@
       });
       const r = B.montaImovel(ficha, { tipo: tipoAtual(), versao });
       imoveis.push(r.imovel);
-      relatorio.push({ ato: (a.tipo === 1 ? 'R.' : 'AV.') + a.numero, pendencias: r.pendencias, avisos: r.avisos });
+      relatorio.push({ ato: a.ehAbertura ? 'Abertura' : (a.tipo === 1 ? 'R.' : 'AV.') + a.numero,
+        pendencias: r.pendencias, avisos: r.avisos });
     }
 
     const arquivo = B.montaArquivo(cns, imoveis, versao);

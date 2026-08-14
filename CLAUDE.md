@@ -78,6 +78,18 @@ Documentação de origem, fora do repositório:
 15. **Ato de garantia nao e transmissao.** Cedula rural, hipoteca e "permuta de
    bens VINCULADOS" (troca de garantia) sao ato 3 - nao pedem valor_transacao.
 
+16. **A abertura da matrícula é um ato**, quando ela mesma tem protocolo e selo
+   (`parser.aberturaEhAto`). Entra como `numero_ato` "0", `ato` 1, e a data sai
+   do fecho ("Morrinhos-GO, 12 de agosto de 2026"), não do cabeçalho — não há
+   cabeçalho. Preâmbulo antigo, sem protocolo, continua sendo só preâmbulo.
+17. **A área da descrição vence a "área total" do CCIR.** O CCIR é do cadastro
+   no INCRA, que pode reunir várias matrículas (Fazenda Monjolinho: 281,5458ha
+   na matrícula, 1.685,5720ha no CCIR). A do CCIR continua candidata e visível.
+18. **`codigo_incra` é o número da certificação**, não o código do imóvel rural
+   do SNCR: sai de "certificação n.º \<uuid\>" com os hífens removidos (32
+   caracteres). Sem ele o arquivo é reprovado sempre que `certificacao_incra`
+   for true.
+
 ## Estado atual
 
 Rural padrão e urbano padrão funcionam ponta a ponta (exemplos reais: matrículas

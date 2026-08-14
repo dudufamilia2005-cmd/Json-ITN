@@ -245,6 +245,11 @@
    */
   const REGRAS_AREA = [
     { re: /remanescente\s+de\s+([\d.]+,\d+)\s*ha/i, peso: 100, rotulo: 'REMANESCENTE de' },
+    // A area declarada na descricao do imovel ("IMOVEL: Fazenda X, com a area de
+    // 281,5458ha") e a DESTE imovel. A area total do CCIR pode ser a do cadastro
+    // inteiro no INCRA, que reune varias matriculas - por isso vem depois.
+    { re: /IM[ÓO]VEL\s*:[^.]{0,120}?com\s+a?\s*[áa]rea\s+de\s+([\d.]+,\d+)\s*ha/i,
+      peso: 95, rotulo: 'area na descricao do imovel' },
     { re: /área\s+total\s*:\s*([\d.]+,\d+)\s*ha/i, peso: 90, rotulo: 'area total (CCIR)' },
     { re: /área\s+total\(ha\)\s*:\s*([\d.]+,\d+)/i, peso: 60, rotulo: 'area total (CAR, declaratoria)' },
     { re: /totalizando\s*:?\s*[\d.,]+\s*alqueires,\s*correspondentes?\s+a\s+([\d.]+,\d+)\s*hectares/i,
@@ -270,10 +275,24 @@
     const t = compacta(texto);
     const out = {};
 
-    let m = t.match(/CAR\b[\s\S]{0,80}?(?:registro\s*)?([A-Z]{2}-?\d{7}[-A-Z0-9]{34,60})/i);
+    // O recibo do CAR sai com separadores variados: por hifen
+    // ("GO-5213806-1D9A-5CA1-...") ou por ponto ("GO-5213806-E291.B492...").
+    let m = t.match(/CAR\b[\s\S]{0,120}?(?:registro\s*)?([A-Z]{2}[-.]?\d{7}[-.A-Z0-9]{34,70})/i);
     if (m) {
-      const limpo = m[1].replace(/-/g, '').toUpperCase();
+      const limpo = m[1].replace(/[-.]/g, '').toUpperCase();
       if (limpo.length === 41) out.car = achado(limpo, m[0], 'CAR');
+    }
+
+    // Certificacao do INCRA: "certificado pelo INCRA, conforme certificacao n.º
+    // b67309ee-31c0-4c91-a121-8c46170f4f8f" - o UUID e o codigo_incra (32
+    // caracteres sem os hifens, como pede a tabela de validacao).
+    m = t.match(/certifica[çc][ãa]o\s*n?\.?º?\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
+      || t.match(/(?:c[óo]digo\s+(?:SIGEF|SNCI|INCRA)|SIGEF)\s*:?\s*n?\.?º?\s*([0-9A-Za-z-]{14,36})/i);
+    if (m) {
+      const limpo = m[1].replace(/-/g, '');
+      if (limpo.length === 32 || limpo.length === 14 || limpo.length === 12) {
+        out.codigo_incra = achado(limpo, m[0], 'certificacao INCRA');
+      }
     }
 
     m = t.match(/CIB\s*:?\s*n?\.?º?\s*([\d.\-]{9,14}|[A-Z0-9]{7}-?[A-Z0-9])/i);
@@ -330,6 +349,12 @@
       const valor = numeroBR(mCert[1]);
       out.certificacao_incra = achado(valor > 0, mCert[0], 'area certificada no CCIR');
       if (valor > 0) out.area_certificada = achado(valor, mCert[0], 'area certificada');
+    }
+    // "certificado pelo Instituto Nacional de Colonizacao e Reforma Agraria -
+    // INCRA" tambem afirma a certificacao, mesmo sem o campo do CCIR.
+    if (!out.certificacao_incra && /certificad[oa]\s+pel[oa][\s\S]{0,80}?INCRA/i.test(t)) {
+      const mc = t.match(/certificad[oa]\s+pel[oa][\s\S]{0,80}?INCRA/i);
+      out.certificacao_incra = achado(true, mc[0], 'certificacao declarada no texto');
     }
     const mDatum = k.match(/datum[-\s]*sad\s*69/);
     if (mDatum) out.sistema_referencia = achado(2, 'DATUM- SAD 69', 'DATUM declarado');
@@ -694,8 +719,22 @@
     const t = compacta(texto);
     const out = {};
     // Segmento que descreve o imovel (para nao pegar o endereco das PARTES).
-    const mSeg = t.match(/IM[ÓO]VEL\s*:?\s*([\s\S]{5,700}?)(?:PROPRIET[ÁA]RI|\.\s*Origem|T[ÍI]TULO AQUISITIVO|Cadastrado na Prefeitura|$)/i);
-    const bruto = compacta(mSeg ? mSeg[1] : t.slice(0, 700));
+    // O rotulo e casado primeiro e o corte vem depois, em JavaScript: com tudo
+    // numa regex so, uma descricao longa (onde "PROPRIETARIOS" esta a mais de
+    // 700 caracteres) fazia o motor desistir do rotulo do inicio e casar um
+    // "imovel" qualquer do meio do texto ("cadastral do imovel na Prefeitura"),
+    // jogando fora justamente o trecho onde o endereco esta.
+    const mLabel = t.match(/IM[ÓO]VEL\s*:\s*/i) || t.match(/\bIM[ÓO]VEL\b\s*/i);
+    let bruto;
+    if (mLabel) {
+      const ini = mLabel.index + mLabel[0].length;
+      let seg = t.slice(ini, ini + 900);
+      const mFim = seg.match(/PROPRIET[ÁA]RI|\.\s*Origem|T[ÍI]TULO AQUISITIVO|Cadastrado na Prefeitura/i);
+      if (mFim) seg = seg.slice(0, mFim.index);
+      bruto = compacta(seg);
+    } else {
+      bruto = compacta(t.slice(0, 700));
+    }
     if (!bruto) return out;
     out.enderecoBruto = achado(bruto.slice(0, 200), bruto.slice(0, 120), 'descricao do imovel');
 
