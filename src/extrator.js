@@ -106,6 +106,12 @@
       ato: 4, alteracao_titularidade: 1, rotulo: 'compra e venda' },
     { re: /(inventario\/partilha|formal de partilha|adjudicacao|arrolamento dos bens)/,
       ato: 4, alteracao_titularidade: 9, rotulo: 'partilha/adjudicacao por obito' },
+    // Divisao amigavel extingue o condominio: cada condomino passa a ser dono
+    // exclusivo da sua parte. E transmissao (o quinhao dos outros muda de mao)
+    // e nao tem item proprio no enum - 16 e "outras nao onerosas". Precisa vir
+    // antes de "desmembramento", que costuma aparecer no mesmo ato.
+    { re: /divisao amigavel/, ato: 4, alteracao_titularidade: 16,
+      rotulo: 'divisao amigavel (extincao de condominio)' },
     { re: /partilha por divorcio/, ato: 4, alteracao_titularidade: 10 },
     { re: /dissolucao de uniao estavel/, ato: 4, alteracao_titularidade: 11 },
     { re: /(doacao|escritura publica de doacao)/, ato: 4, alteracao_titularidade: 6 },
@@ -495,7 +501,11 @@
     { re: /C[ôo]njuge\s*:/gi, rotulo: 'conjuge' },
   ];
 
-  const PALAVRA_NAO_NOME = /(carteira|identidade|cpf|cnpj|cic|rua|avenida|alameda|pra[çc]a|setor|quadra|lote|condom|apto|apt\.|cart[óo]rio|escritura|livro|tabelionato|serventia|comarca|fazenda|banco|cooperativa|matr[íi]cula|registro|of[íi]cio|notas|estado|munic[íi]pio|cidade|rod\.|km|selo|dou f[ée]|nos termos|forma do|origem|valor|im[óo]vel|prenota|protocolo|data|capital federal)/i;
+  // Alem das palavras inteiras, as ABREVIATURAS de documento: o acervo escreve
+  // "portador da CI RG GO nº 47.710 e do CIC nº ...", e "CI RG GO" passava por
+  // nome proprio (tres palavras, iniciais maiusculas) - o proprietario do imovel
+  // aparecia chamado "CI RG" no arquivo enviado.
+  const PALAVRA_NAO_NOME = /(carteira|identidade|cpf|cnpj|cic|rua|avenida|alameda|pra[çc]a|setor|quadra|lote|condom|apto|apt\.|cart[óo]rio|escritura|livro|tabelionato|serventia|comarca|fazenda|banco|cooperativa|matr[íi]cula|registro|of[íi]cio|notas|estado|munic[íi]pio|cidade|rod\.|km|selo|dou f[ée]|nos termos|forma do|origem|valor|im[óo]vel|prenota|protocolo|data|capital federal|\bci\b|\brg\b|\bcrmv\b|\bcnh\b|\bsic\b|\bcgc\b|\bssp\b|\bdgpc\b|\bdetran\b)/i;
 
   /**
    * Razao social logo depois do rotulo da parte: "Banco do Brasil S.A.," ate a
@@ -534,7 +544,7 @@
   }
 
   /** Nome mais proximo ANTES do indice, ignorando rotulos, enderecos e filiacao. */
-  function nomeAntesDe(texto, indice, limiteIni) {
+  function nomeAntesDe(texto, indice, limiteIni, forcarUltimo) {
     const ini = limiteIni != null ? limiteIni : Math.max(0, indice - 320);
     const janela = texto.slice(ini, indice);
     // O "e" so continua o nome quando emenda em palavra com inicial maiuscula
@@ -555,6 +565,9 @@
       candidatos.push({ nome, conjuge: ehConjuge, fim: m.index + m[1].length });
     }
     if (!candidatos.length) return null;
+    // Segundo documento de uma lista do casal ("dos CPF nos. A e B;
+    // respectivamente"): e o do conjuge, o ultimo nome citado.
+    if (forcarUltimo) return candidatos[candidatos.length - 1];
 
     // "X, casado com Y pelo regime da comunhao de bens, inscrito no CPF n.º N":
     // o N e de X, nao de Y - a mencao ao conjuge faz parte da clausula de
@@ -736,7 +749,18 @@
       // O percentual costuma vir depois de todo o endereco da pessoa, bem alem
       // da janela de qualificacao - por isso olha mais longe a frente.
       const janelaPct = t.slice(Math.max(0, m.index - 120), Math.min(t.length, m.index + 800));
-      const achadoNome = nomeAntesDe(t, m.index, jp.ini);
+      // Lista de documentos do casal: "portadores das CI.SSP-GO nos. 145.791 e
+      // 158.598 e dos CPF nos. 035.693.731-34 e 950.897.051-00; respectivamente".
+      // O "respectivamente" diz que a ordem dos numeros segue a dos nomes - e a
+      // qualificacao do casal e longa, entao o nome do primeiro fica bem antes
+      // da janela normal de 320 caracteres.
+      const depoisDoDoc = t.slice(m.index + bruto.length, m.index + bruto.length + 40);
+      const antesDoDoc = t.slice(Math.max(0, m.index - 80), m.index);
+      const primeiroDeDois = /^\s*e\s+[\d.]{6,}/.test(depoisDoDoc);
+      const segundoDeDois = /(?:CPF|CIC|CNPJ)[^\d]{0,25}[\d.\-/]{11,20}\s*e\s*$/i.test(antesDoDoc);
+      const iniNome = (primeiroDeDois || segundoDeDois)
+        ? Math.min(jp.ini, Math.max(0, m.index - 700)) : jp.ini;
+      const achadoNome = nomeAntesDe(t, m.index, iniNome, segundoDeDois);
       let nome = achadoNome ? achadoNome.nome : null;
       // Pessoa juridica: o nome vem LOGO DEPOIS do rotulo ("CREDOR/FIDUCIARIO:
       // Banco do Brasil S.A., sociedade de economia mista, com sede em Brasilia,

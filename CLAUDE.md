@@ -107,6 +107,15 @@ Documentação de origem, fora do repositório:
    ("Fica desta forma ENCERRADA A PRESENTE MATRÍCULA"); sem lê-la o arquivo
    declarava "1 - Ativa" um imóvel que não existe mais, e nada acusava.
 
+23. **Divisão amigável é transmissão** (ato 4, `alteracao_titularidade` 16), e o
+   "coube **exclusivamente** aos condôminos" substitui a titularidade em vez de
+   somar. Sem isso o condômino que saiu ficava dono para sempre — a divisão o
+   cita como "acima qualificado", sem repetir o CPF, e ele nunca entrava na
+   lista de alienantes.
+24. **"portadores das CI nos. A e B e dos CPF nos. C e D; respectivamente"**: a
+   ordem dos números segue a dos nomes. A qualificação do casal é longa, então
+   o nome do primeiro fica além da janela normal de 320 caracteres.
+
 ## Estado atual
 
 Rural padrão e urbano padrão funcionam ponta a ponta (exemplos reais: matrículas

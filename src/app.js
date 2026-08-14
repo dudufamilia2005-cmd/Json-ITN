@@ -193,7 +193,13 @@
         if (adquirentes.length) {
           const alienantes = new Set(X.extraiPessoas(b.texto)
             .filter((p) => p.condicao_parte === 1).map((p) => p.cpf_cnpj));
-          vigente.proprietarios = (vigente.proprietarios || [])
+          // "coube EXCLUSIVAMENTE aos condominos: X e Y" - o ato diz, com essa
+          // palavra, que dali em diante os donos sao so esses. Sem isto o
+          // condomino que saiu ficava na titularidade para sempre, porque a
+          // divisao amigavel o cita sem repetir o CPF ("acima qualificados") e
+          // ele nunca entrava na lista de alienantes.
+          const exclusivo = /coube\s+exclusivamente/i.test(b.texto);
+          vigente.proprietarios = (exclusivo ? [] : (vigente.proprietarios || []))
             .filter((p) => !alienantes.has(p.cpf_cnpj))
             .concat(adquirentes.map((p) => ({
               nome_completo: p.nome_completo,
@@ -203,7 +209,8 @@
               fonte: b.rotulo + ' (adquirente)',
               trecho: p.evidencia,
             })));
-          vigente.fonteTitularidade = b.rotulo + ' (adquirente)';
+          vigente.fonteTitularidade = b.rotulo
+            + (exclusivo ? ' (coube exclusivamente a)' : ' (adquirente)');
         }
       }
 
