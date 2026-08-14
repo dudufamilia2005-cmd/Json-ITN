@@ -84,7 +84,13 @@
   function apuraVigente(blocos, municipioServentia) {
     const urbano = tipoAtual() === 'urbano';
     const vigente = { campos: {}, areaEscolhida: null, candidatosArea: [], confrontantes: [],
-      historico: [], endereco: {}, pessoas: {}, proprietarios: [], fonteTitularidade: null, urbano };
+      historico: [], endereco: {}, pessoas: {}, proprietarios: [], fonteTitularidade: null,
+      // Retrato da titularidade DEPOIS de cada bloco. Um ato antigo tem de
+      // receber quem era dono na epoca dele, nao quem e dono hoje: numa
+      // matricula onde a ultima transmissao e um inventario, o obito averbado
+      // antes dela estava sendo vinculado aos herdeiros, que so viraram donos
+      // depois. A chave e o rotulo do bloco ('abertura', 'AV.01', ...).
+      snapshots: {}, urbano };
     const anota = (campo, achado, origem) => {
       if (!achado) return;
       vigente.campos[campo] = { valor: achado.valor, trecho: achado.trecho, rotulo: achado.rotulo, ato: origem };
@@ -197,9 +203,40 @@
           estado_civil: p.estado_civil != null ? p.estado_civil : (anterior.estado_civil ?? null),
           regime_bens: declarou ? p.regime_bens : (anterior.regime_bens ?? null),
           ato_regime: declarou ? b.rotulo : (anterior.ato_regime || null),
+          // O regime PRESUMIDO fica guardado a parte: nao vale como "o que a
+          // matricula diz", mas serve de ultimo recurso para o ato cadastral
+          // que so recebeu o proprietario vigente - senao ele sai sem regime e
+          // o arquivo e recusado por um dado que o documento ate sugere.
+          regime_presumido_bens: p.regime_bens != null && p.regime_presumido
+            ? p.regime_bens : (anterior.regime_presumido_bens ?? null),
+          ato_regime_presumido: p.regime_bens != null && p.regime_presumido
+            ? b.rotulo : (anterior.ato_regime_presumido || null),
           ato_estado_civil: p.estado_civil != null ? b.rotulo : (anterior.ato_estado_civil || null),
         };
       }
+
+      // Averbacao de casamento: o proprietario continua "solteiro" no historico,
+      // porque o ato o nomeia sem requalificar (nem repete o CPF). O proprio ato
+      // diz que ele se casou - e e disso que os atos seguintes precisam.
+      if (/CASAMENTO|casou-se/i.test(b.texto)) {
+        const rb = X._internos.regimeBensDe(b.texto, dataBloco) || {};
+        for (const cpf of Object.keys(vigente.pessoas)) {
+          const p = vigente.pessoas[cpf];
+          if (!p.nome_completo) continue;
+          if (b.texto.indexOf(p.nome_completo) < 0) continue;
+          p.estado_civil = 2;
+          p.ato_estado_civil = b.rotulo + ' (casamento averbado)';
+          if (rb.regime_bens != null && !rb.presumido) {
+            p.regime_bens = rb.regime_bens;
+            p.ato_regime = b.rotulo + ' (casamento averbado)';
+          }
+        }
+      }
+
+      vigente.snapshots[b.rotulo] = {
+        proprietarios: (vigente.proprietarios || []).slice(),
+        fonte: vigente.fonteTitularidade,
+      };
     }
 
     // Ordem dos blocos ja e cronologica: o ultimo de maior peso ganha.
@@ -228,7 +265,7 @@
       const p = vigente.pessoas[cpf];
       if (p.nome_completo) porNome[X.chaveNome(p.nome_completo)] = Object.assign({ cpf_cnpj: cpf }, p);
     }
-    vigente.proprietarios = (vigente.proprietarios || []).map((prop) => {
+    const casaPeloNome = (lista) => (lista || []).map((prop) => {
       if (prop.cpf_cnpj) return prop;
       const achado = porNome[X.chaveNome(prop.nome_completo)];
       if (!achado) return prop;
@@ -239,6 +276,12 @@
         casadoPeloNome: true,
       });
     });
+    vigente.proprietarios = casaPeloNome(vigente.proprietarios);
+    // Os retratos por ato passam pelo mesmo casamento nome -> CPF: eles sao
+    // copias feitas antes desta etapa.
+    for (const rotulo of Object.keys(vigente.snapshots)) {
+      vigente.snapshots[rotulo].proprietarios = casaPeloNome(vigente.snapshots[rotulo].proprietarios);
+    }
 
     const mun = X.extraiMunicipio(blocos.map((b) => b.texto).join(' '), municipioServentia);
     if (mun) vigente.municipio = mun.valor;
@@ -251,12 +294,18 @@
    * por eles e o PROPRIETARIO vigente - e e isso que entra aqui, com a origem
    * declarada, em vez de o ato ser recusado por falta de pessoa.
    */
-  function proprietariosComoPartes(vigente, dataAto) {
-    return (vigente.proprietarios || []).map((prop) => {
+  function proprietariosComoPartes(vigente, dataAto, rotuloAto) {
+    // Titularidade COMO ESTAVA quando o ato foi praticado, e nao a de hoje.
+    const retrato = rotuloAto && vigente.snapshots ? vigente.snapshots[rotuloAto] : null;
+    const donos = retrato ? retrato.proprietarios : vigente.proprietarios;
+    return (donos || []).map((prop) => {
       // Estado civil e regime vem do historico da propria pessoa, apurado em
       // qualquer ato do documento - o ato cadastral nunca qualifica ninguem.
       const hist = (vigente.pessoas || {})[prop.cpf_cnpj] || {};
       const ehPJ = prop.cpf_cnpj && prop.cpf_cnpj.length === 14;
+      const regimeDito = prop.regime_bens != null ? prop.regime_bens
+        : (hist.regime_bens != null ? hist.regime_bens : null);
+      const usaPresumido = regimeDito == null && hist.regime_presumido_bens != null;
       return {
       nome_completo: prop.nome_completo,
       cpf_cnpj: prop.cpf_cnpj,
@@ -264,8 +313,11 @@
       relacao_juridica: 1,         // proprietario
       estado_civil: prop.estado_civil != null ? prop.estado_civil
         : (hist.estado_civil != null ? hist.estado_civil : (ehPJ ? 7 : null)),
-      regime_bens: prop.regime_bens != null ? prop.regime_bens
-        : (hist.regime_bens != null ? hist.regime_bens : null),
+      regime_bens: usaPresumido ? hist.regime_presumido_bens : regimeDito,
+      regime_presumido: usaPresumido,
+      evidencia_regime: usaPresumido
+        ? 'regime presumido no ato ' + (hist.ato_regime_presumido || '?')
+        : (hist.ato_regime ? 'regime declarado no ato ' + hist.ato_regime : null),
       percentual: prop.percentual,
       estrangeiro: false,
       data_inicio_rel_juridica: prop.desde || dataAto,
@@ -286,6 +338,7 @@
     estado.cnmCalculado = null;
     estado.numeroAssumido = false;
     estado.tipoLogradouroAssumido = false;
+    estado.situacaoEncerrada = null;
     const doc = P.separaDocumento(texto);
     estado.atos = doc.atos;
     estado.preambulo = doc.preambulo;
@@ -315,6 +368,16 @@
     f.tipo_matricula_transcricao = f.tipo_matricula_transcricao ?? 1;
     if (urbano) f.contexto_urbano = f.contexto_urbano ?? 1;
     else f.contexto_rural = f.contexto_rural ?? 1;
+    // Matricula encerrada (desmembramento total, unificacao, transporte) diz isso
+    // no proprio ato: "Fica desta forma ENCERRADA A PRESENTE MATRICULA". Sem ler
+    // essa frase o arquivo sai declarando "1 - Ativa" um imovel que nao existe
+    // mais, e o erro nao aparece em lugar nenhum.
+    const textoTodo = (doc.preambulo || '') + ' ' + estado.atos.map((a) => a.texto).join(' ');
+    const mEncerrada = textoTodo.match(/ENCERRADA?\s+(?:a\s+)?(?:presente|esta)\s+MATR[ÍI]CULA|MATR[ÍI]CULA\s+(?:fica\s+)?ENCERRADA/i);
+    if (f.situacao == null && mEncerrada) {
+      f.situacao = '4';
+      estado.situacaoEncerrada = mEncerrada[0];
+    }
     f.situacao = f.situacao ?? '1';
     if (abertura.numero_matricula) {
       f.numero_matricula = abertura.numero_matricula.valor;
@@ -459,12 +522,20 @@
 
       // 1) Ato sem nenhuma parte: vincula o proprietario vigente. E o caso de
       //    CAR, CEP, CCIR/CIB, obito, clausulas restritivas e afins.
-      if (!fa.pessoas.length) {
-        const donos = proprietariosComoPartes(vigente, fa.data_ato);
+      //    Vale tambem quando o ato CITA alguem mas nao lhe da papel algum - a
+      //    averbacao de casamento nomeia o conjuge, e quem responde pelo imovel
+      //    continua sendo o dono. Nesses casos o dono e somado, nao substitui.
+      const semPapel = fa.pessoas.every((pe) => !pe.condicao_parte && !pe.relacao_juridica);
+      if (semPapel) {
+        const jaCitados = new Set(fa.pessoas.map((pe) => pe.cpf_cnpj).filter(Boolean));
+        const donos = proprietariosComoPartes(vigente, fa.data_ato, rotuloAto)
+          .filter((d) => !jaCitados.has(d.cpf_cnpj));
         if (donos.length) {
-          fa.pessoas = donos;
+          const fonte = ((vigente.snapshots || {})[rotuloAto] || {}).fonte
+            || vigente.fonteTitularidade || 'abertura';
+          fa.pessoas = fa.pessoas.concat(donos);
           anotaCorrecao('dados_pessoa', donos.length + ' proprietario(s) vigente(s) vinculado(s) - '
-            + 'o ato nao qualifica ninguem (fonte: ' + (vigente.fonteTitularidade || 'abertura') + ')');
+            + 'o ato nao lhes da papel proprio (titularidade na data do ato, fonte: ' + fonte + ')');
         }
       }
 
@@ -489,6 +560,22 @@
         anotaCorrecao('dados_pessoa[' + i + '].relacao_juridica',
           'consta como proprietaria na titularidade apurada (' + (dono.fonte || '?') + ')');
       });
+
+      // 1e) Averbacao de CASAMENTO sob comunhao universal: o conjuge nomeado
+      //     passa a ser co-proprietario, e e por isso que a averbacao existe.
+      //     So vale com o regime DECLARADO no ato e so na comunhao universal -
+      //     na parcial o bem anterior ao casamento nao se comunica, e ali a
+      //     pendencia continua de pe, para o oficial decidir.
+      if (/CASAMENTO|casou-se/i.test(a.texto)) {
+        fa.pessoas.forEach((pe, i) => {
+          if (pe.condicao_parte || pe.relacao_juridica) return;
+          if (pe.regime_bens !== 2 || pe.regime_presumido) return;
+          pe.relacao_juridica = 1;
+          if (!pe.data_inicio_rel_juridica) pe.data_inicio_rel_juridica = fa.data_ato;
+          anotaCorrecao('dados_pessoa[' + i + '].relacao_juridica',
+            'averbacao de casamento sob comunhao universal declarada no ato -> proprietario');
+        });
+      }
 
       // 1d) CPF antigo de 9 digitos completado pelo mesmo numero que aparece
       //     inteiro em ato posterior (o mais recente e o correto).
@@ -740,7 +827,10 @@
       linha('numero_matricula', campoTexto(f.numero_matricula, set('numero_matricula'), 'ex: 1118')),
       linha('data_matricula', campoTexto(f.data_matricula, set('data_matricula'), 'DD/MM/AAAA')),
       linha('cnm', campoTexto(f.cnm, (v) => { f.cnm = v; render(); }, '000000.0.0000000-00'), provaCnm(f)),
-      linha('situacao', selectEnum('situacao', f.situacao, set('situacao'))),
+      linha('situacao', selectEnum('situacao', f.situacao, set('situacao')),
+        estado.situacaoEncerrada
+          ? '4 - Encerrada, pelo texto do ato: "' + estado.situacaoEncerrada + '"'
+          : null),
     ];
     const especificos = urbano ? [
       linha('contexto_urbano', selectEnum('contexto_urbano', f.contexto_urbano, set('contexto_urbano'), false)),

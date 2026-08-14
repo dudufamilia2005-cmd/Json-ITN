@@ -199,17 +199,21 @@
     const t = compacta(textoAto);
     const k = chave(t);
     const achados = [];
-    const re = /R\$\s*([\d.]+,\d{2})/g;
+    // Moedas do acervo: real, cruzeiro, cruzado novo, cruzado. O valor antigo so
+    // conta quando vem rotulado ("pelo preco de NCz$22.000,00"): "Valor Cr$" solto
+    // e o credito de uma cedula rural, que nao e transacao.
+    const re = /(R|Cr|NCz|Cz|CR)\$\s*([\d.]+,\d{2})/g;
     let m;
     while ((m = re.exec(t)) !== null) {
       const ini = Math.max(0, m.index - 90);
       const contexto = k.slice(ini, m.index + 20);
       if (CONTEXTO_PROIBIDO.test(contexto)) continue;
+      const moeda = m[1].toUpperCase() === 'R' ? 'R$' : m[1] + '$';
       // Rotulos reais do acervo: "VALOR:", "VALOR TOTAL:", "VALOR DECLARADO:",
       // "VALOR DE INDENIZACAO:", "pelo preco de", "no valor de".
       const rotulado = /(valor(?:\s+(?:total|declarado|de indenizacao|da transacao))?|pelo preco|no valor de|preco de)\s*:?\s*$/
         .test(chave(t.slice(Math.max(0, m.index - 34), m.index)).trim());
-      achados.push({ valor: numeroBR(m[1]), trecho: t.slice(ini, m.index + 30), rotulado });
+      achados.push({ valor: numeroBR(m[2]), trecho: t.slice(ini, m.index + 30), rotulado, moeda });
     }
     return achados;
   }
@@ -217,10 +221,12 @@
   /** valor_transacao: so em ato de transmissao, e so o valor do negocio. */
   function extraiValorTransacao(textoAto, atoClassificado) {
     if (!atoClassificado || !atoClassificado.ato || atoClassificado.ato.valor !== 4) return null;
-    const candidatos = valoresRotulados(textoAto);
+    const candidatos = valoresRotulados(textoAto)
+      .filter((c) => c.moeda === 'R$' || c.rotulado);
     if (!candidatos.length) return null;
     const preferido = candidatos.find((c) => c.rotulado) || candidatos[0];
-    return achado(preferido.valor, preferido.trecho, 'valor do negocio');
+    return achado(preferido.valor, preferido.trecho,
+      preferido.moeda === 'R$' ? 'valor do negocio' : 'valor do negocio em ' + preferido.moeda);
   }
 
   /** ITBI/ITCD efetivamente recolhido e a base de calculo. */
@@ -276,8 +282,10 @@
     const out = {};
 
     // O recibo do CAR sai com separadores variados: por hifen
-    // ("GO-5213806-1D9A-5CA1-...") ou por ponto ("GO-5213806-E291.B492...").
-    let m = t.match(/CAR\b[\s\S]{0,120}?(?:registro\s*)?([A-Z]{2}[-.]?\d{7}[-.A-Z0-9]{34,70})/i);
+    // ("GO-5213806-1D9A-5CA1-..."), por ponto ("GO-5213806-E291.B492...") ou
+    // sem separador nenhum ("GO-5213806-6263C338708248E9962C0F2339AFD455").
+    // Por isso a janela e larga e quem decide e o tamanho normalizado: 41.
+    let m = t.match(/CAR\b[\s\S]{0,120}?(?:registro\s*)?([A-Z]{2}[-.]?\d{7}[-.A-Z0-9]{32,70})/i);
     if (m) {
       const limpo = m[1].replace(/[-.]/g, '').toUpperCase();
       if (limpo.length === 41) out.car = achado(limpo, m[0], 'CAR');
@@ -406,13 +414,23 @@
     { re: /DONAT[ÁA]RI[OA]S?\s*:/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'donatario' },
     { re: /OUTORGANTES?\s*:/gi, condicao_parte: 1, rotulo: 'outorgante' },
     { re: /OUTORGAD[OA]S?\s*:/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'outorgado' },
+    // Servidao: "como outorgada beneficiaria, Petroleo Brasileiro SA". Nao ha
+    // valor de enum para servidao - o layout so tem "outros" (18).
+    { re: /(?:como\s+)?outorgad[oa]s?\s+benefici[áa]ri[oa]s?/gi,
+      relacao_juridica: 18, rotulo: 'beneficiaria da servidao (outros)' },
     // Anuente / outorga uxoria comparece, mas nao adquire nem transmite.
     { re: /(INTERVENIENTE\s+ANUENTE[^:]{0,40}|OUTORGA\s+UX[ÓO]RIA)\s*:/gi,
       rotulo: 'interveniente anuente (nao e parte - confirmar)' },
     // Beneficiario de usufruto ou servidao: "instituiu a favor de X", "em favor de Y".
     { re: /(?:instituiu?\s+)?(?:a|em)\s+favor\s+de/gi, relacao_juridica: 2, rotulo: 'beneficiario (a favor de)' },
-    { re: /PROPRIET[ÁA]RIOS?\s*:/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'proprietario' },
+    // Nos livros antigos o rotulo vem com ponto e virgula ("Proprietários; Fulano").
+    { re: /PROPRIET[ÁA]RIOS?\s*[:;]/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'proprietario' },
     { re: /adquiriu por compra feita [aà]/gi, condicao_parte: 1, rotulo: 'alienante (compra feita a)' },
+    // Redacao antiga da transmissao, sem rotulo TRANSMITENTE/ADQUIRENTE:
+    //   "o imovel objeto da presente matricula foi adquirido por X [...]
+    //    por compra feita a Y".
+    { re: /foi adquirid[oa] por/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'adquirente (foi adquirido por)' },
+    { re: /por compra feita [aà]/gi, condicao_parte: 1, rotulo: 'alienante (compra feita a)' },
     { re: /Coube (?:a|à|ao) (?:herdeir[ao] e cession[áa]ri[ao]|cession[áa]ri[ao]|vi[úu]va meeira|herdeir[ao])/gi,
       condicao_parte: 2, relacao_juridica: 1, rotulo: 'herdeiro/cessionario' },
     // O credor as vezes vem sem dois-pontos ("firmado pela credora Cooperativa...").
@@ -479,7 +497,9 @@
     const ultimo = candidatos[candidatos.length - 1];
     if (ultimo.conjuge && candidatos.length > 1) {
       const entre = chave(janela.slice(ultimo.fim));
-      if (/regime|comunhao|separacao|ambos|portadores|inscritos|casados/.test(entre)) {
+      // "ele" e o modo antigo de devolver a qualificacao ao marido depois de
+      // nomear a mulher: "casado com Y, ELE fazendeiro, portador do CPF N".
+      if (/regime|comunhao|separacao|ambos|portadores|inscritos|casados|\bele\b/.test(entre)) {
         for (let i = candidatos.length - 2; i >= 0; i--) {
           if (!candidatos[i].conjuge) return candidatos[i];
         }
@@ -543,8 +563,13 @@
         return { regime_bens: 2, trecho: 'ato de ' + dataAto
           + ': "comunhao de bens" antes da Lei 6.515/77 e a comunhao universal' };
       }
-      return { regime_bens: null, ambiguo: true,
-        trecho: 'regime da comunhao de bens (nao diz universal ou parcial)' };
+      // Depois da Lei 6.515/77 a expressao continua sendo o nome ANTIGO da
+      // comunhao universal: quem se casa sob o regime legal novo aparece como
+      // "comunhao parcial", escrito assim. Fica como presuncao, marcada, porque
+      // o casamento em si pode ser posterior e mal redigido.
+      return { regime_bens: 2, presumido: true,
+        trecho: 'ato de ' + (dataAto || '?') + ': "comunhao de bens" sem qualificar'
+          + ' - nome antigo da comunhao universal (presumido, confira)' };
     }
 
     // So "casado(s)", sem regime nenhum: vale o regime legal da epoca do ato -

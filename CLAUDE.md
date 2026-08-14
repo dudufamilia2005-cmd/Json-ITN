@@ -90,6 +90,23 @@ Documentação de origem, fora do repositório:
    caracteres). Sem ele o arquivo é reprovado sempre que `certificacao_incra`
    for true.
 
+19. **Ato antigo recebe o dono da época, não o de hoje.** `apuraVigente` guarda
+   um retrato da titularidade depois de cada bloco (`vigente.snapshots`); um
+   óbito averbado antes do inventário estava sendo vinculado aos herdeiros, que
+   só viraram donos depois.
+20. **Averbação de casamento muda o histórico da pessoa.** O ato nomeia o
+   proprietário sem requalificá-lo (nem repete o CPF), então ele continuava
+   "solteiro" nos atos seguintes. Sob comunhão universal declarada, o cônjuge
+   nomeado entra como proprietário; na parcial a pendência fica de pé.
+21. **"Comunhão de bens", sem qualificar, é o nome antigo da comunhão
+   universal.** Antes de 26/12/1977 é certeza; depois vira presunção *marcada*
+   — quem se casa sob o regime legal de hoje aparece escrito "comunhão
+   parcial". O regime presumido fica guardado à parte do declarado e só é usado
+   como último recurso (ver invariante 14).
+22. **Matrícula encerrada sai como `situacao` 4.** A frase está no próprio ato
+   ("Fica desta forma ENCERRADA A PRESENTE MATRÍCULA"); sem lê-la o arquivo
+   declarava "1 - Ativa" um imóvel que não existe mais, e nada acusava.
+
 ## Estado atual
 
 Rural padrão e urbano padrão funcionam ponta a ponta (exemplos reais: matrículas
