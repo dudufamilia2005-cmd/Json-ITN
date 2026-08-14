@@ -262,7 +262,24 @@
       peso: 50, rotulo: 'totalizando (abertura)' },
   ];
 
-  function candidatosArea(texto) {
+  /**
+   * Area escrita por extenso no acervo antigo: "com a area de 66 (sessenta e
+   * seis) hectares, 85 (oitenta e cinco) ares e 67 (sessenta e sete) centiares".
+   * A conta e exata (1 are = 0,01ha; 1 centiare = 0,0001ha) e essa area e a
+   * DESTA matricula - vence o CCIR, que pode ser o cadastro de varias.
+   *
+   * So vale onde o ato DESCREVE o imovel (abertura ou ato = 5). A mesma frase
+   * aparece numa gleba VENDIDA ("com a area de 51(cinquenta e um) hectares,
+   * 11(onze) ares e 90(noventa) centiares", R-32 da 1.118), e ali ela e a
+   * parcela do negocio, nao a area do imovel.
+   */
+  const RE_AREA_EXTENSO = new RegExp(
+    'com\\s+a?\\s*[áa]rea\\s+(?:total\\s+)?de\\s+'
+    + '(\\d{1,4})\\s*(?:\\([^)]{0,80}\\))?\\s*hectares?'
+    + '(?:\\s*,?\\s*(?:e\\s+)?(\\d{1,3})\\s*(?:\\([^)]{0,80}\\))?\\s*ares?)?'
+    + '(?:\\s*,?\\s*(?:e\\s+)?(\\d{1,3}(?:,\\d+)?)\\s*(?:\\([^)]{0,80}\\))?\\s*centiares?)?', 'i');
+
+  function candidatosArea(texto, opcoes) {
     const t = compacta(texto);
     const saida = [];
     for (const r of REGRAS_AREA) {
@@ -271,6 +288,16 @@
         saida.push({ valor: { valor: numeroBR(m[1]), unidade: 2 }, peso: r.peso,
           rotulo: r.rotulo, trecho: compacta(m[0]) });
       }
+    }
+    const me = (opcoes && opcoes.descricao) ? t.match(RE_AREA_EXTENSO) : null;
+    // So conta se houver ao menos ares ou centiares: "com a area de 5 hectares"
+    // sozinho tambem casa a regra decimal e nao precisa desta.
+    if (me && (me[2] || me[3])) {
+      const ha = Number(me[1]) + (me[2] ? Number(me[2]) / 100 : 0)
+        + (me[3] ? numeroBR(me[3]) / 10000 : 0);
+      saida.push({ valor: { valor: Number(ha.toFixed(6)), unidade: 2 }, peso: 94,
+        rotulo: 'area por extenso na descricao (ha + ares + centiares)',
+        trecho: compacta(me[0]) });
     }
     return saida;
   }
@@ -317,7 +344,9 @@
       || t.match(/CCIR\s*:?\s*(\d{11})\b/i);
     if (m) out.ccir = achado(m[1], m[0], 'CCIR');
 
-    m = t.match(/(?:c[óo]digo do im[óo]vel rural|INCRA sob o)\s*:?\s*n?[ºo°]?\.?\s*([\d.]{13,17}-?\d?)/i);
+    // "Cadastrado no INCRA EM NOME DE <terceiro>, sob o nº 936.120.274.135-0":
+    // o acervo antigo intercala o nome do cadastrante entre "INCRA" e "sob o".
+    m = t.match(/(?:c[óo]digo do im[óo]vel rural|INCRA(?:[^;.]{0,90}?)?\s*sob o)\s*:?\s*n?[ºo°]?\.?\s*([\d.]{13,17}-?\d?)/i);
     if (m) {
       const limpo = m[1].replace(/\D/g, '');
       if (limpo.length === 12 || limpo.length === 13) out.cod_sncr = achado(limpo, m[0], 'codigo do imovel rural');
@@ -339,7 +368,10 @@
     }
 
     m = t.match(/denomina[çc][ãa]o do im[óo]vel rural\s*:\s*([^;]{3,100}?)\s*;/i)
-      || t.match(/IM[ÓO]VEL\s*:\s*([A-ZÀ-ÿ][^,;]{3,100}?)\s*,\s*neste/i);
+      // "IMOVEL: Fazenda Serra ou Tras os Montes, LUGAR DENOMINADO Capim, neste
+      // Municipio": o nome e o primeiro pedaco; o "lugar denominado" e a
+      // localidade, nao o nome do imovel.
+      || t.match(/IM[ÓO]VEL\s*:\s*([A-ZÀ-ÿ][^,;]{3,100}?)\s*,(?:\s*lugar\s+denominad[oa][^,;]{1,60}\s*,)?\s*(?:neste|nesta|situad|no Munic)/i);
     if (m) out.nome_imovel = achado(compacta(m[1]), m[0], 'denominacao do imovel');
 
     return out;
@@ -428,7 +460,10 @@
     { re: /(INTERVENIENTE\s+ANUENTE[^:]{0,40}|OUTORGA\s+UX[ÓO]RIA)\s*:/gi,
       rotulo: 'interveniente anuente (nao e parte - confirmar)' },
     // Beneficiario de usufruto ou servidao: "instituiu a favor de X", "em favor de Y".
-    { re: /(?:instituiu?\s+)?(?:a|em)\s+favor\s+de/gi, relacao_juridica: 2, rotulo: 'beneficiario (a favor de)' },
+    // "a favor de Maria", "a favor DO Banco do Brasil": o artigo contraido
+    // tambem conta. Qual relacao juridica isso e depende do ato - so no usufruto
+    // ou na servidao o beneficiario e usufrutuario (ver ajuste abaixo).
+    { re: /(?:instituiu?\s+)?(?:a|em)\s+favor\s+d[eoa]s?\b/gi, relacao_juridica: 2, rotulo: 'beneficiario (a favor de)' },
     // Nos livros antigos o rotulo vem com ponto e virgula ("Proprietários; Fulano").
     // O "(?!\s*\/)" deixa os rotulos compostos para as regras especificas abaixo.
     { re: /PROPRIET[ÁA]RI[OA]S?\s*(?!\s*\/)[:;]/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'proprietario' },
@@ -728,7 +763,9 @@
 
       let relacao = papel ? (papel.relacao_juridica || null) : null;
       const ehBeneficiario = papel && /favor de/.test(papel.rotulo || '');
-      if (ehBeneficiario) relacao = ehServidao ? 18 : (ehUsufruto ? 2 : relacao);
+      // Usufrutuario (2) so no usufruto. Em servidao, penhor ou cedula, quem
+      // esta "a favor de" e credor/beneficiario sem item proprio no enum: 18.
+      if (ehBeneficiario) relacao = ehUsufruto ? 2 : 18;
       if (ehNuaPropriedade && papel && /donatario|adquirente/.test(papel.rotulo || '')) relacao = 3;
 
       pessoas.push({

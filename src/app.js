@@ -108,16 +108,18 @@
       for (const k of ['georreferenciamento', 'certificacao_incra', 'sistema_referencia',
         'sistema_coordenadas', 'centroide']) anota(k, geo[k], b.rotulo);
 
-      // Area: no urbano vale a area do terreno em m2 (a construida fica de fora).
-      const areas = urbano ? X.candidatosAreaUrbana(b.texto) : X.candidatosArea(b.texto);
-      for (const cand of areas) {
-        vigente.candidatosArea.push(Object.assign({ ato: b.rotulo }, cand));
-      }
       // Endereco, quadra/lote e area construida SO valem da abertura ou de ato
       // que altera o imovel. Num ato de transmissao, "Quadra 03, Lote 16" e o
       // endereco RESIDENCIAL das partes, nao a descricao do imovel.
       const descreveImovel = b.rotulo === 'abertura'
         || (X.classificaAto(b.texto).ato || {}).valor === 5;
+
+      // Area: no urbano vale a area do terreno em m2 (a construida fica de fora).
+      const areas = urbano ? X.candidatosAreaUrbana(b.texto)
+        : X.candidatosArea(b.texto, { descricao: descreveImovel });
+      for (const cand of areas) {
+        vigente.candidatosArea.push(Object.assign({ ato: b.rotulo }, cand));
+      }
       if (urbano && descreveImovel) {
         anota('area_construida', X.extraiAreaConstruida(b.texto), b.rotulo);
         const end = X.extraiEndereco(b.texto);
