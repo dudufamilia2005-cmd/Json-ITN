@@ -355,6 +355,7 @@
     estado.numeroAssumido = false;
     estado.tipoLogradouroAssumido = false;
     estado.situacaoEncerrada = null;
+    estado.certAssumida = false;
     estado.cortados = [];
     const doc = P.separaDocumento(texto);
     estado.atos = doc.atos;
@@ -436,7 +437,14 @@
       f.georreferenciamento = false;
       estado.geoAssumido = true;
     }
-    if (v('certificacao_incra') !== null) f.certificacao_incra = v('certificacao_incra');
+    if (v('certificacao_incra') !== null) {
+      f.certificacao_incra = v('certificacao_incra');
+    } else if (f.certificacao_incra == null) {
+      // Campo sempre obrigatorio no rural. Nenhum ato do documento afirma
+      // certificacao do INCRA - e "false" e a leitura honesta, dita na tela.
+      f.certificacao_incra = false;
+      estado.certAssumida = true;
+    }
     if (v('sistema_referencia')) f.sistema_referencia = v('sistema_referencia');
     if (v('sistema_coordenadas')) f.sistema_coordenadas = v('sistema_coordenadas');
     if (vigente.areaEscolhida) f.area_terreno_total = vigente.areaEscolhida.valor;
@@ -871,7 +879,10 @@
     ] : [
       linha('contexto_rural', selectEnum('contexto_rural', f.contexto_rural, set('contexto_rural'), false)),
       linha('georreferenciamento', campoBool(f.georreferenciamento, set('georreferenciamento')), provaGeo()),
-      linha('certificacao_incra', campoBool(f.certificacao_incra, set('certificacao_incra'))),
+      linha('certificacao_incra', campoBool(f.certificacao_incra, set('certificacao_incra')),
+        estado.certAssumida
+          ? 'assumido false: nenhum ato declara certificacao do INCRA - confirme'
+          : provaVigente('certificacao_incra')),
       linha('codigo_incra', campoTexto(f.codigo_incra, set('codigo_incra'))),
       linha('cib', campoTexto(f.cib, set('cib'), 'A0A0A0A-0'), 'nunca preencher com NIRF'),
       linha('ccir', campoTexto(f.ccir, set('ccir'), '11 digitos'), provaVigente('ccir')),

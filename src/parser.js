@@ -17,7 +17,10 @@
   'use strict';
 
   // "R.30-1.234", "AV.37-1.234", "Av.39", "R-30", "REGISTRO 5", "AVERBACAO 12"
-  const CABECALHO = /^[\s>*]*(R|AV|AVERBA(?:C|Ç)(?:AO|ÃO)|REGISTRO)\s*[.\-–—]?\s*(\d{1,5})(?:\s*[-–—/]\s*([\d.]+))?\s*(?:[-–—:.)]|\s|$)/i;
+  // A virgula tem de fechar o numero da matricula ("R-1-6.529, Morrinhos"):
+  // sem ela na lista de terminadores, o motor voltava atras e casava so "6",
+  // e a matricula 6.529 saia no arquivo como numero 6.
+  const CABECALHO = /^[\s>*]*(R|AV|AVERBA(?:C|Ç)(?:AO|ÃO)|REGISTRO)\s*[.\-–—]?\s*(\d{1,5})(?:\s*[-–—/]\s*([\d.]+))?\s*(?:[-–—:.,)]|\s|$)/i;
 
   // Linha divisoria de atos: 5+ tracos/underscores/iguais, sozinha na linha.
   const DIVISORIA = /^[\s]*[-_=–—]{5,}[\s]*$/;

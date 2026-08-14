@@ -352,17 +352,23 @@
     const out = {};
     const mGeo = k.match(/(georreferenciad|vertice asy|azimutes e distancias|sistema geodesico)/);
     if (mGeo) out.georreferenciamento = achado(true, compacta(t).slice(Math.max(0, mGeo.index - 30), mGeo.index + 90), 'descricao georreferenciada');
-    const mCert = t.match(/área certificada\s*:\s*([\d.]+,\d+)\s*ha/i);
+    // "certificado pelo Instituto Nacional de Colonizacao e Reforma Agraria -
+    // INCRA", ou o numero da certificacao: e o texto do ato que afirma a
+    // certificacao, e so ele.
+    const mc = t.match(/certificad[oa]\s+pel[oa][\s\S]{0,80}?INCRA/i)
+      || t.match(/certifica[çc][ãa]o\s*n\.?[ºo°]?\s*[0-9a-f-]{32,40}/i);
+    if (mc) out.certificacao_incra = achado(true, mc[0], 'certificacao declarada no texto');
+
+    // A "area certificada" do CCIR NAO decide: ela vem preenchida em imovel que
+    // nunca foi georreferenciado, e declarar certificacao ali obriga um
+    // codigo_incra que a matricula nao tem. Fica so como area candidata, visivel.
+    const mCert = t.match(/área certificada\s*:\s*([\d.]+,\d+)\s*(?:ha)?/i);
     if (mCert) {
       const valor = numeroBR(mCert[1]);
-      out.certificacao_incra = achado(valor > 0, mCert[0], 'area certificada no CCIR');
-      if (valor > 0) out.area_certificada = achado(valor, mCert[0], 'area certificada');
-    }
-    // "certificado pelo Instituto Nacional de Colonizacao e Reforma Agraria -
-    // INCRA" tambem afirma a certificacao, mesmo sem o campo do CCIR.
-    if (!out.certificacao_incra && /certificad[oa]\s+pel[oa][\s\S]{0,80}?INCRA/i.test(t)) {
-      const mc = t.match(/certificad[oa]\s+pel[oa][\s\S]{0,80}?INCRA/i);
-      out.certificacao_incra = achado(true, mc[0], 'certificacao declarada no texto');
+      if (valor > 0) out.area_certificada = achado(valor, mCert[0], 'area certificada no CCIR');
+      if (!out.certificacao_incra && valor === 0) {
+        out.certificacao_incra = achado(false, mCert[0], 'area certificada 0,0000 no CCIR');
+      }
     }
     const mDatum = k.match(/datum[-\s]*sad\s*69/);
     if (mDatum) out.sistema_referencia = achado(2, 'DATUM- SAD 69', 'DATUM declarado');
@@ -424,7 +430,17 @@
     // Beneficiario de usufruto ou servidao: "instituiu a favor de X", "em favor de Y".
     { re: /(?:instituiu?\s+)?(?:a|em)\s+favor\s+de/gi, relacao_juridica: 2, rotulo: 'beneficiario (a favor de)' },
     // Nos livros antigos o rotulo vem com ponto e virgula ("Proprietários; Fulano").
-    { re: /PROPRIET[ÁA]RIOS?\s*[:;]/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'proprietario' },
+    // O "(?!\s*\/)" deixa os rotulos compostos para as regras especificas abaixo.
+    { re: /PROPRIET[ÁA]RI[OA]S?\s*(?!\s*\/)[:;]/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'proprietario' },
+    // Garantia real: o dono que da o imovel em garantia continua proprietario;
+    // na alienacao fiduciaria ele e o FIDUCIANTE (8) e o banco o FIDUCIARIO (9).
+    { re: /PROPRIET[ÁA]RI[OA]S?\s*\/\s*FIDUCIANTES?\s*[:;]/gi,
+      relacao_juridica: 8, rotulo: 'proprietario/fiduciante' },
+    { re: /(?:PROPRIET[ÁA]RI[OA]S?|EMITENTES?)\s*\/\s*HIPOTECANTES?(?:\s*\/\s*DEVEDOR(?:ES)?)?\s*[:;]/gi,
+      relacao_juridica: 1, rotulo: 'proprietario/hipotecante' },
+    { re: /CREDOR(?:ES)?\s*\/\s*FIDUCI[ÁA]RI[OA]S?\s*[:;]/gi,
+      relacao_juridica: 9, rotulo: 'credor/fiduciario' },
+    { re: /(?:FIDUCIANTES?)\s*[:;]/gi, relacao_juridica: 8, rotulo: 'fiduciante' },
     { re: /adquiriu por compra feita [aà]/gi, condicao_parte: 1, rotulo: 'alienante (compra feita a)' },
     // Redacao antiga da transmissao, sem rotulo TRANSMITENTE/ADQUIRENTE:
     //   "o imovel objeto da presente matricula foi adquirido por X [...]
@@ -434,22 +450,40 @@
     { re: /Coube (?:a|à|ao) (?:herdeir[ao] e cession[áa]ri[ao]|cession[áa]ri[ao]|vi[úu]va meeira|herdeir[ao])/gi,
       condicao_parte: 2, relacao_juridica: 1, rotulo: 'herdeiro/cessionario' },
     // O credor as vezes vem sem dois-pontos ("firmado pela credora Cooperativa...").
-    { re: /(?:pel[ao]\s+)?(?:Credor(?:a|es)?|Financiador(?:a)?)\b\s*:?/gi,
+    { re: /(?:pel[ao]\s+)?(?:Credor(?:a|es)?|Financiador(?:a)?)\b(?!\s*\/)\s*:?/gi,
       relacao_juridica: 18, rotulo: 'credor' },
-    { re: /(?:Devedores?|Emitentes?)\s*:/gi, relacao_juridica: 8, rotulo: 'devedor/emitente' },
+    // "Devedores?" exigia a letra "e": "Devedor:" no singular - a forma mais
+    // comum nas cedulas rurais - nunca casava, e a parte ficava sem papel.
+    { re: /(?:Devedor(?:es)?|Emitentes?)(?!\s*\/)\s*:/gi, relacao_juridica: 8, rotulo: 'devedor/emitente' },
     { re: /(?:Avalista\(s\)|Avalistas?|Intervenientes? [Gg]arantes?|interveniente garantidora)\s*:?/gi,
       relacao_juridica: 18, rotulo: 'avalista/garante' },
     { re: /C[ôo]njuge\s*:/gi, rotulo: 'conjuge' },
   ];
 
-  const PALAVRA_NAO_NOME = /(carteira|identidade|cpf|cnpj|cic|rua|avenida|alameda|pra[çc]a|setor|quadra|lote|condom|apto|apt\.|cart[óo]rio|escritura|livro|tabelionato|serventia|comarca|fazenda|banco|cooperativa|matr[íi]cula|registro|of[íi]cio|notas|estado|munic[íi]pio|cidade|rod\.|km|selo|dou f[ée]|nos termos|forma do|origem|valor|im[óo]vel|prenota|protocolo|data)/i;
+  const PALAVRA_NAO_NOME = /(carteira|identidade|cpf|cnpj|cic|rua|avenida|alameda|pra[çc]a|setor|quadra|lote|condom|apto|apt\.|cart[óo]rio|escritura|livro|tabelionato|serventia|comarca|fazenda|banco|cooperativa|matr[íi]cula|registro|of[íi]cio|notas|estado|munic[íi]pio|cidade|rod\.|km|selo|dou f[ée]|nos termos|forma do|origem|valor|im[óo]vel|prenota|protocolo|data|capital federal)/i;
+
+  /**
+   * Razao social logo depois do rotulo da parte: "Banco do Brasil S.A.," ate a
+   * primeira virgula. E onde a PJ se identifica; o que vem depois e qualificacao
+   * ("sociedade de economia mista, com sede em Brasilia, Capital Federal...").
+   */
+  function razaoSocialApos(trecho) {
+    const t = compacta(trecho).replace(/^[\s:;-]+/, '');
+    if (!t) return null;
+    const m = t.match(/^([^,;]{3,150})/);
+    if (!m) return null;
+    const nome = m[1].replace(/[\s.;]+$/, (f) => (/\.$/.test(f) ? '.' : '')).trim();
+    if (nome.split(/\s+/).length < 2) return null;
+    if (!/[A-Za-zÀ-ÿ]{3}/.test(nome)) return null;
+    return nome;
+  }
 
   /**
    * Limites do "pedaco" de uma pessoa dentro do ato. Sem isso, a janela de
    * qualificacao invade a pessoa seguinte: o espolio (que era "casado") herdava
    * o "viuva" da adquirente logo abaixo.
    */
-  const SEPARADOR_PESSOA = /(\d\)\s*-|;\s*e,|;\s*\d\)|TRANSMITENTES?\s*:|ADQUIRENTES?\s*:|PROPRIET[ÁA]RIOS?\s*:|Credor[a]?\s*:|Devedores?\s*:|Emitentes?\s*:|Avalista)/g;
+  const SEPARADOR_PESSOA = /(\d\)\s*-|;\s*e,|;\s*\d\)|TRANSMITENTES?\s*:|ADQUIRENTES?\s*:|PROPRIET[ÁA]RI[OA]S?(?:\s*\/\s*[A-ZÀ-ÝÇ]+)*\s*:|Credor(?:a|es)?(?:\s*\/\s*[A-ZÀ-ÝÇ]+)*\s*:|Devedor(?:es)?\s*:|Emitentes?(?:\s*\/\s*[A-ZÀ-ÝÇ]+)*\s*:|Avalista)/g;
 
   function janelaDaPessoa(texto, indice, atras, frente) {
     let ini = Math.max(0, indice - (atras || 320));
@@ -628,12 +662,16 @@
     }
     marcas.sort((a, b) => a.pos - b.pos);
 
-    const papelDe = (indice) => {
+    const marcaDe = (indice) => {
       let atual = null;
       for (const marca of marcas) {
         if (marca.pos <= indice) atual = marca; else break;
       }
-      return atual ? atual.papel : null;
+      return atual;
+    };
+    const papelDe = (indice) => {
+      const marca = marcaDe(indice);
+      return marca ? marca.papel : null;
     };
 
     const pessoas = [];
@@ -656,6 +694,7 @@
         if (/^\s*[.\-]?\s*\d/.test(depois)) continue;
       }
       const papel = papelDe(m.index);
+      const marca = marcaDe(m.index);
       // Janela limitada ao pedaco da propria pessoa (ver janelaDaPessoa).
       const jp = janelaDaPessoa(t, m.index, 320, 320);
       const janela = jp.texto;
@@ -663,7 +702,15 @@
       // da janela de qualificacao - por isso olha mais longe a frente.
       const janelaPct = t.slice(Math.max(0, m.index - 120), Math.min(t.length, m.index + 800));
       const achadoNome = nomeAntesDe(t, m.index, jp.ini);
-      const nome = achadoNome ? achadoNome.nome : null;
+      let nome = achadoNome ? achadoNome.nome : null;
+      // Pessoa juridica: o nome vem LOGO DEPOIS do rotulo ("CREDOR/FIDUCIARIO:
+      // Banco do Brasil S.A., sociedade de economia mista, com sede em Brasilia,
+      // Capital Federal, [...] inscrita no CNPJ n.º ..."). Procurar o nome antes
+      // do documento pegava "Capital Federal", ou nada.
+      if (digitos.length === 14 && marca && marca.fim <= m.index) {
+        const razao = razaoSocialApos(t.slice(marca.fim, m.index));
+        if (razao) nome = razao;
+      }
       const clave = digitos + '|' + (nome || '');
       if (vistos.has(clave)) continue;
       vistos.add(clave);
@@ -1042,7 +1089,8 @@
     const out = {};
     // So vale o "MATRICULA N" do INICIO do documento. No meio do preambulo,
     // "Matricula n.º 454" e a matricula de ORIGEM (desmembramento), nao esta.
-    const m = t.match(/MATR[ÍI]CULA\s*(?:n\.?º?)?\s*([\d.]{1,10})\s*[,.-]/i);
+    // Os dois formatos do acervo: "MATRICULA N.º 1.118 -" e "MATRICULA: 6.529 -".
+    const m = t.match(/MATR[ÍI]CULA\s*:?\s*(?:n\.?º?)?\s*:?\s*([\d.]{1,10})\s*[,.-]/i);
     if (m && m.index < 40) {
       out.numero_matricula = achado(m[1].replace(/\D/g, ''), m[0], 'cabecalho da matricula');
     }
