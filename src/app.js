@@ -978,6 +978,26 @@
   }
 
   /** Evidencia de um campo apurado no estado vigente. */
+  /**
+   * Alguns campos ficam vazios nao porque o dado falta na matricula, e sim porque
+   * o que esta escrito nao serve como esta: a certificacao do INCRA com 31
+   * caracteres em vez de 32, por exemplo. "Campo obrigatorio ausente" e verdade
+   * do arquivo, mas esconde isso - e a diferenca muda o que o oficial faz
+   * (conferir um numero, em vez de ir buscar um dado que nao existe).
+   */
+  const CAMPOS_COM_ACHADO_PARCIAL = { codigo_incra: 'codigo_incra_incompleto' };
+
+  function explicaAusente(caminho) {
+    if (!caminho) return '';
+    const campo = String(caminho).split('.').pop();
+    const chave = CAMPOS_COM_ACHADO_PARCIAL[campo];
+    if (!chave) return '';
+    const achado = estado.vigente && estado.vigente.campos[chave];
+    if (!achado) return '';
+    return '. NAO esta ausente na matricula: o ' + campo + ' foi encontrado como "'
+      + achado.valor + '" (' + achado.rotulo + ')';
+  }
+
   function provaVigente(campo) {
     const c = estado.vigente && estado.vigente.campos[campo];
     if (!c) return '';
@@ -1206,7 +1226,8 @@
       d.appendChild(el('summary', { textContent: 'Erros de schema (' + erros.length + ')' }));
       const ul = el('ul', { className: 'erros' });
       for (const e of erros.slice(0, 200)) {
-        ul.appendChild(el('li', {}, [el('code', { textContent: e.path || '(raiz)' }), ' - ' + e.message]));
+        ul.appendChild(el('li', {}, [el('code', { textContent: e.path || '(raiz)' }),
+          ' - ' + e.message + explicaAusente(e.path)]));
       }
       if (erros.length > 200) ul.appendChild(el('li', { textContent: '... e mais ' + (erros.length - 200) }));
       d.appendChild(ul);
@@ -1220,7 +1241,8 @@
         + ' pendencia(s), ' + item.avisos.length + ' aviso(s)' }));
       const ul = el('ul', { className: 'erros' });
       for (const p of item.pendencias) {
-        ul.appendChild(el('li', {}, [el('code', { textContent: p.campo }), ' - ' + p.motivo]));
+        ul.appendChild(el('li', {}, [el('code', { textContent: p.campo }),
+          ' - ' + p.motivo + explicaAusente(p.campo)]));
       }
       for (const av of item.avisos) {
         ul.appendChild(el('li', { className: 'aviso-item' }, [el('code', { textContent: av.campo }), ' - ' + av.motivo]));
