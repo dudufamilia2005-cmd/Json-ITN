@@ -12,3 +12,4 @@ _*.html
 # O Conversor-ONR.html tambem sai de fora porque embute essas fixtures.
 tests/
 Conversor-ONR.html
+_sandbox2.html

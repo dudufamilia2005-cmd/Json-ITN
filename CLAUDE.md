@@ -34,8 +34,11 @@ Documentação de origem, fora do repositório:
    pendência com o motivo. A única derivação automática é `motivo_envio`, e ela
    emite aviso quando sobrescreve um valor informado.
 2. **`motivo_envio` sai do JavaScript, não de julgamento.** Corte 02/12/2025.
-3. **CIB nunca recebe NIRF.** São campos separados no parser (ver
-   `docs/divergencias.md`, item 2).
+3. **NIRF e CIB são o mesmo número** — decisão da serventia (17/08/2026): o NIRF
+   virou CIB e substituir um pelo outro não traz problema. Continuam em campos
+   separados no parser, e o `cib` só é preenchido a partir do NIRF (ou de
+   "Cadastrado na Receita Federal sob o n.º") quando a matrícula não traz o
+   rótulo novo — dizendo na tela de onde veio. Ver `docs/divergencias.md`, item 2.
 4. **Separação de atos:** divisórias de traços primeiro, cabeçalho só rotula; e
    todo casamento de cabeçalho é case-insensitive. Há teste de regressão para as
    duas coisas — elas já quebraram em produção.
@@ -120,6 +123,19 @@ Documentação de origem, fora do repositório:
 24. **"portadores das CI nos. A e B e dos CPF nos. C e D; respectivamente"**: a
    ordem dos números segue a dos nomes. A qualificação do casal é longa, então
    o nome do primeiro fica além da janela normal de 320 caracteres.
+
+25. **A mesma escritura gera dois atos, e o corpo é que os separa.** "Doação da
+   parte disponível com reserva de usufruto" aparece no ato que transmite (ato 4)
+   e no que registra o usufruto (ato 3); o que decide é o rótulo das partes
+   ("Usufrutuários:", "Nú-Proprietários:"), e ele vence o título — o título tem
+   120 caracteres e corta a palavra "usufruto" no meio. Pela mesma razão,
+   "Cancelamento de Usufruto" e "Pacto Comissório" precisam de regra própria:
+   os dois citam a escritura de compra e venda do ato anterior.
+26. **CPF único do casal é normal nos livros antigos** — "inscritos no CPF em
+   conjunto sob o nº". Fica com o titular (o primeiro nomeado), e a janela de
+   busca do nome é ampliada, porque a qualificação do casal é longa. O doador
+   também precisa de rótulo próprio ("por doação que lhes fizeram X e Y"), senão
+   herda o "adquirente" da frase anterior e nunca sai da titularidade.
 
 ## Estado atual
 

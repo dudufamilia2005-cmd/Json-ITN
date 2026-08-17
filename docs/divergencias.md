@@ -28,18 +28,27 @@ Como o schema usa `additionalProperties: false`, mandar `decisao_jud` ou
 o que o ambiente de produção realmente aceita hoje. Até essa resposta, `1.2.0` é
 a opção segura — é o que o validador oficial do Anexo IV aceita.
 
-## 2. CIB não é NIRF
+## 2. NIRF e CIB
 
 Numa matrícula do acervo o mesmo número aparece como **NIRF** num registro e
-foi rotulado como **CIB** numa averbação posterior. São cadastros diferentes:
+rotulado como **CIB** numa averbação posterior — na 1.118, `05429102` nos dois.
+Os nomes são de épocas diferentes:
 
 - **NIRF** — Número do Imóvel na Receita Federal, formato numérico antigo.
-- **CIB** — Cadastro Imobiliário Brasileiro, formato `A0A0A0A-0`, 8 caracteres
-  alfanuméricos.
+- **CIB** — Cadastro Imobiliário Brasileiro, que o substituiu; formato
+  `A0A0A0A-0`, 8 caracteres alfanuméricos.
 
-O NIRF sem pontuação tem 8 caracteres e **passa** no `pattern` do
-schema. Ou seja: o arquivo é aceito e o dado vai errado. O parser captura os dois
-em campos separados e a tela avisa quando encontra NIRF sem CIB.
+**Decisão da serventia (17/08/2026):** é o mesmo número, e substituir um pelo
+outro não traz problema. A ferramenta captura os dois em campos separados e
+preenche o `cib` a partir do NIRF apenas quando a matrícula não traz o rótulo
+novo — os três formatos do acervo são "NIRF: 9.389.122-9", "Cadastrado na Receita
+Federal sob o n.º 4.706.960-0" e "Número do Imóvel na Receita Federal - CIB".
+A origem fica dita na tela ("numero na Receita Federal (NIRF) usado como CIB"),
+para que a conferência seja possível.
+
+Antes dessa decisão o campo ficava vazio e a matrícula era reprovada por
+`cib` ausente em todo ato com `motivo_envio` 1 — foi o caso da 11.958, cujo
+único registro do número é "Cadastrado na Receita Federal sob o n.° 4.706.960-0".
 
 ## 3. Regime de bens foi unificado — as opções antigas não existem mais
 

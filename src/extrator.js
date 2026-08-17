@@ -101,6 +101,19 @@
     { re: /(cancelamento do usufruto|extincao do usufruto|fica extinto o usufruto)/,
       ato: 3, rotulo: 'cancelamento de usufruto' },
     { re: /(servidao)/, ato: 3, rotulo: 'servidao' },
+    // ---- Atos que CITAM uma escritura de transmissao mas nao transmitem nada.
+    // Precisam vir antes das regras de compra e venda / doacao: o cancelamento
+    // de usufruto e o pacto comissorio do R-5 citam a mesma escritura de compra
+    // e venda, e o registro do usufruto reservado cita a escritura de doacao.
+    // Sem isto os tres eram lidos como transmissao e passavam a exigir
+    // valor_transacao, que eles nao tem.
+    { re: /cancelamento\s+(?:parcial\s+)?d[eo]\s+usufruto|usufruto\s+(?:fica\s+)?cancelad/,
+      ato: 3, rotulo: 'cancelamento de usufruto' },
+    { re: /pacto comissorio/, ato: 3, rotulo: 'pacto comissorio (gravame)' },
+    { re: /usufrutuari[oa]s?\s*[:;]|nu\s*-?\s*propriet[áa]ri[oa]s?\s*[:;]|reserva de usufruto/,
+      ato: 3, rotulo: 'usufruto / nua propriedade' },
+    { re: /mudanca de denominacao|passa a denominar-se/,
+      ato: 5, alteracao_imovel: 12, rotulo: 'mudanca de denominacao do imovel' },
     { re: /(desapropriacao)/, ato: 4, alteracao_titularidade: 17, rotulo: 'desapropriacao' },
     { re: /(venda e compra|compra e venda|compra a venda|adquiriu por compra)/,
       ato: 4, alteracao_titularidade: 1, rotulo: 'compra e venda' },
@@ -168,6 +181,21 @@
 
   function classificaAto(textoAto) {
     const titulo = tituloDoAto(textoAto);
+    // A escritura de "doacao da parte disponivel COM RESERVA DE USUFRUTO" gera
+    // DOIS atos com o mesmo titulo: um registra a doacao da nua propriedade
+    // (transmissao) e o outro registra o usufruto reservado. Quem separa os dois
+    // sao os rotulos das partes, no corpo - e eles precisam vencer o titulo,
+    // senao o ato do usufruto e lido como transmissao e passa a exigir valor.
+    const kt = chave(textoAto);
+    if (/usufrutuari[oa]s?\s*[:;]/.test(kt) || /\bnu\s*-?\s*propriet[áa]ri[oa]s?\s*[:;]/.test(kt)) {
+      const mu = compacta(textoAto).match(/(?:N[úu]\s*-?\s*Propriet[áa]ri|Usufrutu[áa]ri)[^;.]{0,80}/i);
+      return {
+        ato: achado(3, mu ? mu[0] : titulo, 'usufruto / nua propriedade [rotulo das partes]'),
+        alteracao_titularidade: null,
+        alteracao_imovel: null,
+        titulo,
+      };
+    }
     // Duas passadas: primeiro o titulo (decisivo), depois o corpo.
     for (const escopo of [{ txt: titulo, onde: 'titulo do ato' }, { txt: textoAto, onde: 'corpo do ato' }]) {
       const k = chave(escopo.txt);
@@ -349,6 +377,20 @@
     m = t.match(/NIRF\s*:?\s*n?\.?º?\s*([\d.\-]{9,14})/i);
     if (m) out.nirf = achado(m[1].replace(/[.\-]/g, ''), m[0], 'NIRF');
 
+    // O NIRF virou CIB (Cadastro Imobiliario Brasileiro) e o numero e o mesmo:
+    // por isso ele serve de CIB quando a matricula nao traz o rotulo novo. O
+    // acervo escreve de tres modos: "NIRF: 9.389.122-9", "Cadastrado na Receita
+    // Federal sob o n.º 4.706.960-0" e "Numero do Imovel na Receita Federal".
+    if (!out.cib) {
+      const mRf = t.match(/(?:Cadastrad[oa]\s+na\s+Receita\s+Federal\s+sob\s+o|Im[óo]vel\s+na\s+Receita\s+Federal(?:\s*-\s*\w+)?)\s*:?\s*n?\.?[ºo°]?\s*([\d.\-]{9,12})/i);
+      const base = mRf ? mRf[1] : (out.nirf ? out.nirf.valor : null);
+      const limpo = String(base || '').replace(/[.\-]/g, '');
+      if (limpo.length === 8) {
+        out.cib = achado(limpo, mRf ? mRf[0] : (out.nirf ? out.nirf.trecho : ''),
+          'numero na Receita Federal (NIRF) usado como CIB');
+      }
+    }
+
     m = t.match(/CCIR[\s\S]{0,120}?n\.?º?\s*(\d{11})\b/i)
       || t.match(/CCIR\s*:?\s*(\d{11})\b/i);
     if (m) out.ccir = achado(m[1], m[0], 'CCIR');
@@ -376,7 +418,10 @@
       if (limpo.length === 8) out.cep = achado(limpo, m[0], 'CEP');
     }
 
-    m = t.match(/denomina[çc][ãa]o do im[óo]vel rural\s*:\s*([^;]{3,100}?)\s*;/i)
+    // Averbacao de mudanca de denominacao (art. 167, II, 4): o nome NOVO vence a
+    // descricao da abertura, como qualquer dado mais recente.
+    m = t.match(/passa\s+a\s+denominar-se\s*:?\s*["“']([^"“”']{3,100})["”']/i)
+      || t.match(/denomina[çc][ãa]o do im[óo]vel rural\s*:\s*([^;]{3,100}?)\s*;/i)
       // "IMOVEL: Fazenda Serra ou Tras os Montes, LUGAR DENOMINADO Capim, neste
       // Municipio": o nome e o primeiro pedaco; o "lugar denominado" e a
       // localidade, nao o nome do imovel.
@@ -491,6 +536,15 @@
     //    por compra feita a Y".
     { re: /foi adquirid[oa] por/gi, condicao_parte: 2, relacao_juridica: 1, rotulo: 'adquirente (foi adquirido por)' },
     { re: /por compra feita [aà]/gi, condicao_parte: 1, rotulo: 'alienante (compra feita a)' },
+    // Doacao na redacao antiga: "foi adquirido por X [...] POR DOACAO QUE LHES
+    // FIZERAM Bartolomeu e sua mulher Noemia". Sem este rotulo os doadores
+    // herdavam o "adquirente" da frase anterior e nunca saiam da titularidade.
+    { re: /por doa[çc][ãa]o que (?:lhes?\s+)?(?:fizeram|fez|faz)|doad(?:or|ores)\s*:?/gi,
+      condicao_parte: 1, rotulo: 'alienante (doador)' },
+    // Usufruto: o enum tem usufrutuario (2) e nu-proprietario (3). O acervo
+    // escreve "Nú-Proprietários" com acento e hifen.
+    { re: /Usufrutu[áa]ri[oa]s?\s*[:;]/gi, relacao_juridica: 2, rotulo: 'usufrutuario' },
+    { re: /N[úu]\s*-?\s*Propriet[áa]ri[oa]s?\s*[:;]/gi, relacao_juridica: 3, rotulo: 'nu-proprietario' },
     { re: /Coube (?:a|à|ao) (?:herdeir[ao] e cession[áa]ri[ao]|cession[áa]ri[ao]|vi[úu]va meeira|herdeir[ao])/gi,
       condicao_parte: 2, relacao_juridica: 1, rotulo: 'herdeiro/cessionario' },
     // O credor as vezes vem sem dois-pontos ("firmado pela credora Cooperativa...").
@@ -564,7 +618,7 @@
       const antes = janela.slice(Math.max(0, m.index - 14), m.index);
       if (/filh[oa]s?\s+de\s*$/i.test(antes)) continue;
       // Mencao de conjuge: "casado com Y", "e sua mulher Y", "sua esposa Y".
-      const ehConjuge = /(?:,?\s*com|e\s+sua\s+mulher|sua\s+mulher|e\s+sua\s+esposa|sua\s+esposa|c[ôo]njuge:?)\s*$/i.test(antes);
+      const ehConjuge = /(?:,?\s*com|e\s+sua\s+mulher|sua\s+mulher|e\s+sua\s+esposa|sua\s+esposa|(?:e\s+)?seu\s+marido|c[ôo]njuge:?)\s*$/i.test(antes);
       candidatos.push({ nome, conjuge: ehConjuge, fim: m.index + m[1].length });
     }
     if (!candidatos.length) return null;
@@ -681,7 +735,11 @@
     const num = '([\\d]{1,3}(?:,\\d{1,4})?)';
     const m = janela.match(new RegExp('parte (?:correspondente a|de|ideal de)?\\s*' + num + '\\s*%', 'i'))
       || janela.match(new RegExp('equivalente a\\s*' + num + '\\s*%', 'i'))
-      || janela.match(new RegExp(num + '\\s*%\\s*do im[óo]vel', 'i'));
+      || janela.match(new RegExp(num + '\\s*%\\s*do im[óo]vel', 'i'))
+      // "A referida compra e feita na proporcao de 50% para CADA UM dos
+      // adquirentes": o percentual esta no fim do ato, longe dos nomes, e vale
+      // igual para todos - por isso serve para qualquer parte da janela.
+      || janela.match(new RegExp('propor[çc][ãa]o de\\s*' + num + '\\s*%[^.;]{0,40}cada', 'i'));
     return m ? { percentual: numeroBR(m[1]), trecho: compacta(m[0]) } : { percentual: null };
   }
 
@@ -725,6 +783,11 @@
       return marca ? marca.papel : null;
     };
 
+    // Percentual declarado uma vez para todos os adquirentes, no fim do ato:
+    // "*NOTA: A referida compra e feita na proporcao de 50% para cada um dos
+    // adquirentes". Vale para quem adquire, e nao esta perto de nenhum nome.
+    const pctParaCada = percentualDe(t).percentual;
+
     const pessoas = [];
     const vistos = new Set();
     RE_DOC.lastIndex = 0;
@@ -761,7 +824,12 @@
       const antesDoDoc = t.slice(Math.max(0, m.index - 80), m.index);
       const primeiroDeDois = /^\s*e\s+[\d.]{6,}/.test(depoisDoDoc);
       const segundoDeDois = /(?:CPF|CIC|CNPJ)[^\d]{0,25}[\d.\-/]{11,20}\s*e\s*$/i.test(antesDoDoc);
-      const iniNome = (primeiroDeDois || segundoDeDois)
+      // CPF unico do casal - normal nos livros antigos, quando a mulher usava o
+      // documento do marido: "portadores das CI [...] respectivamente, inscritos
+      // no CPF EM CONJUNTO sob o nº 016.802.931-68". O titular e o primeiro
+      // nomeado; a qualificacao do casal e longa e joga o nome dele para tras.
+      const cpfDoCasal = /\b(?:inscritos|portadores|em conjunto)\b[^.;]{0,60}$/i.test(antesDoDoc);
+      const iniNome = (primeiroDeDois || segundoDeDois || cpfDoCasal)
         ? Math.min(jp.ini, Math.max(0, m.index - 700)) : jp.ini;
       const achadoNome = nomeAntesDe(t, m.index, iniNome, segundoDeDois);
       let nome = achadoNome ? achadoNome.nome : null;
@@ -805,7 +873,9 @@
         regime_bens: ehPJ ? null : rb.regime_bens,
         regime_ambiguo: !!rb.ambiguo,
         regime_presumido: !!rb.presumido,
-        percentual: pct.percentual,
+        // O percentual proprio da pessoa vence o declarado "para cada um".
+        percentual: pct.percentual != null ? pct.percentual
+          : ((papel && papel.condicao_parte === 2) ? pctParaCada : null),
         estrangeiro: /estrangeir/.test(chave(janela)) ? true : false,
         // Conjuge citado com "... com <nome>": pode ou nao ser parte, dependendo
         // do regime. Fica marcado para conferencia em vez de decidido aqui.
