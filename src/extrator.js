@@ -349,21 +349,45 @@
     // ("GO-5213806-1D9A-5CA1-..."), por ponto ("GO-5213806-E291.B492...") ou
     // sem separador nenhum ("GO-5213806-6263C338708248E9962C0F2339AFD455").
     // Por isso a janela e larga e quem decide e o tamanho normalizado: 41.
-    let m = t.match(/CAR\b[\s\S]{0,120}?(?:registro\s*)?([A-Z]{2}[-.]?\d{7}[-.A-Z0-9]{32,70})/i);
+    // Alem dos separadores, o acervo as vezes deixa ESPACO depois de cada ponto
+    // ("GO-5213806- C9D7. 764F. 2BDO. ..."). Cada grupo e casado em separado, e
+    // a captura para no primeiro pedaco que nao seja alfanumerico - por isso a
+    // virgula que vem depois nao entra. Quem decide e o tamanho normalizado: 41.
+    let m = t.match(/CAR\b[\s\S]{0,160}?(?:registro\s*)?([A-Z]{2}\s*[-.]?\s*\d{7}(?:\s*[-.]\s*[A-Z0-9]{2,32})+)/i);
     if (m) {
-      const limpo = m[1].replace(/[-.]/g, '').toUpperCase();
-      if (limpo.length === 41) out.car = achado(limpo, m[0], 'CAR');
+      const limpo = m[1].replace(/[-.\s]/g, '').toUpperCase();
+      if (limpo.length === 41) {
+        out.car = achado(limpo, compacta(m[0]), 'CAR');
+        // O CAR e hexadecimal: letra fora de A-F costuma ser erro de digitacao
+        // ("2BDO" por "2BD0"). Nao troco nada - so aviso.
+        const corpo = limpo.slice(9);
+        if (/[G-Z]/.test(corpo)) {
+          out.car_suspeito = achado(limpo, compacta(m[0]),
+            'o CAR tem letra fora de A-F ("' + (corpo.match(/[G-Z]/g) || []).join('') + '") '
+            + 'e o registro e hexadecimal - confira se nao e zero no lugar de "O"');
+        }
+      }
     }
 
     // Certificacao do INCRA: "certificado pelo INCRA, conforme certificacao n.º
     // b67309ee-31c0-4c91-a121-8c46170f4f8f" - o UUID e o codigo_incra (32
     // caracteres sem os hifens, como pede a tabela de validacao).
-    m = t.match(/certifica[çc][ãa]o\s*n?\.?º?\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
+    // O ultimo grupo do UUID tem 12 caracteres, mas o acervo tem caso com 11
+    // (falta um digito no documento): a captura aceita de 8 a 14 e quem decide
+    // e a conferencia de tamanho abaixo, que avisa em vez de completar.
+    m = t.match(/certifica[çc][ãa]o\s*n?\.?º?\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8,14})/i)
       || t.match(/(?:c[óo]digo\s+(?:SIGEF|SNCI|INCRA)|SIGEF)\s*:?\s*n?\.?º?\s*([0-9A-Za-z-]{14,36})/i);
     if (m) {
       const limpo = m[1].replace(/-/g, '');
       if (limpo.length === 32 || limpo.length === 14 || limpo.length === 12) {
         out.codigo_incra = achado(limpo, m[0], 'certificacao INCRA');
+      } else {
+        // O numero existe mas nao fecha o tamanho (na 38.572 o UUID veio com 31
+        // caracteres - falta um digito no documento). Nao completo nada: mostro
+        // o que esta escrito e digo o que falta, para conferencia no SIGEF.
+        out.codigo_incra_incompleto = achado(limpo, m[0],
+          'a certificacao tem ' + limpo.length + ' caracteres e o layout espera 32 '
+          + '(UUID) - confira o numero no SIGEF antes de preencher');
       }
     }
 
@@ -616,7 +640,10 @@
       if (PALAVRA_NAO_NOME.test(nome)) continue;
       // "filho de X e Y" e filiacao, nao a parte; "com Z" e o conjuge.
       const antes = janela.slice(Math.max(0, m.index - 14), m.index);
+      // "filho de X e Y" e filiacao; "natural de Ribeirao Preto-SP" e a
+      // naturalidade do espolio - nenhum dos dois e a parte.
       if (/filh[oa]s?\s+de\s*$/i.test(antes)) continue;
+      if (/(?:natural|nascid[oa])\s+(?:de|em|aos)\s*$/i.test(antes)) continue;
       // Mencao de conjuge: "casado com Y", "e sua mulher Y", "sua esposa Y".
       const ehConjuge = /(?:,?\s*com|e\s+sua\s+mulher|sua\s+mulher|e\s+sua\s+esposa|sua\s+esposa|(?:e\s+)?seu\s+marido|c[ôo]njuge:?)\s*$/i.test(antes);
       candidatos.push({ nome, conjuge: ehConjuge, fim: m.index + m[1].length });
@@ -731,15 +758,22 @@
    * Percentual da parte. Aceita inteiro ("equivalente a 50% do imovel", comum
    * no urbano) e decimal com virgula ("parte de 29,50%", comum no rural).
    */
+  const NUM_PCT = '([\\d]{1,3}(?:,\\d{1,4})?)';
+
+  /**
+   * "A referida compra e feita na proporcao de 50% PARA CADA UM dos adquirentes":
+   * declarado uma vez, no fim do ato, longe dos nomes - e vale para todos os
+   * adquirentes. So esta forma pode ser lida fora da janela da pessoa; as outras
+   * pertencem a uma parte especifica e nao podem vazar para a seguinte.
+   */
+  const RE_PCT_PARA_CADA = new RegExp('propor[çc][ãa]o de\\s*' + NUM_PCT + '\\s*%[^.;]{0,40}cada', 'i');
+
   function percentualDe(janela) {
-    const num = '([\\d]{1,3}(?:,\\d{1,4})?)';
+    const num = NUM_PCT;
     const m = janela.match(new RegExp('parte (?:correspondente a|de|ideal de)?\\s*' + num + '\\s*%', 'i'))
       || janela.match(new RegExp('equivalente a\\s*' + num + '\\s*%', 'i'))
       || janela.match(new RegExp(num + '\\s*%\\s*do im[óo]vel', 'i'))
-      // "A referida compra e feita na proporcao de 50% para CADA UM dos
-      // adquirentes": o percentual esta no fim do ato, longe dos nomes, e vale
-      // igual para todos - por isso serve para qualquer parte da janela.
-      || janela.match(new RegExp('propor[çc][ãa]o de\\s*' + num + '\\s*%[^.;]{0,40}cada', 'i'));
+      || janela.match(RE_PCT_PARA_CADA);
     return m ? { percentual: numeroBR(m[1]), trecho: compacta(m[0]) } : { percentual: null };
   }
 
@@ -786,7 +820,8 @@
     // Percentual declarado uma vez para todos os adquirentes, no fim do ato:
     // "*NOTA: A referida compra e feita na proporcao de 50% para cada um dos
     // adquirentes". Vale para quem adquire, e nao esta perto de nenhum nome.
-    const pctParaCada = percentualDe(t).percentual;
+    const mCada = t.match(RE_PCT_PARA_CADA);
+    const pctParaCada = mCada ? numeroBR(mCada[1]) : null;
 
     const pessoas = [];
     const vistos = new Set();
@@ -813,8 +848,10 @@
       const jp = janelaDaPessoa(t, m.index, 320, 320);
       const janela = jp.texto;
       // O percentual costuma vir depois de todo o endereco da pessoa, bem alem
-      // da janela de qualificacao - por isso olha mais longe a frente.
-      const janelaPct = t.slice(Math.max(0, m.index - 120), Math.min(t.length, m.index + 800));
+      // da janela de qualificacao - por isso olha mais longe a frente, mas SEM
+      // passar do pedaco da propria pessoa: num inventario com onze partes, os
+      // "20%" do primeiro herdeiro estavam sendo dados tambem ao espolio.
+      const janelaPct = janelaDaPessoa(t, m.index, 120, 800).texto;
       // Lista de documentos do casal: "portadores das CI.SSP-GO nos. 145.791 e
       // 158.598 e dos CPF nos. 035.693.731-34 e 950.897.051-00; respectivamente".
       // O "respectivamente" diz que a ordem dos numeros segue a dos nomes - e a

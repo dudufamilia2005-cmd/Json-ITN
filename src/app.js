@@ -101,7 +101,10 @@
       const cad = X.extraiCadastros(b.texto);
       const campos = urbano
         ? ['cib', 'cif', 'cep', 'nome_imovel']
-        : ['car', 'cib', 'nirf', 'ccir', 'cod_sncr', 'codigo_incra', 'cep', 'nome_imovel'];
+        // "codigo_incra_incompleto" e "car_suspeito" nao viram valor de campo:
+        // sao achados que a tela mostra para conferencia.
+        : ['car', 'cib', 'nirf', 'ccir', 'cod_sncr', 'codigo_incra', 'cep', 'nome_imovel',
+          'codigo_incra_incompleto', 'car_suspeito'];
       for (const k of campos) anota(k, cad[k], b.rotulo);
 
       const geo = X.extraiGeo(b.texto);
@@ -199,7 +202,7 @@
           // divisao amigavel o cita sem repetir o CPF ("acima qualificados") e
           // ele nunca entrava na lista de alienantes.
           const exclusivo = /coube\s+exclusivamente/i.test(b.texto);
-          vigente.proprietarios = (exclusivo ? [] : (vigente.proprietarios || []))
+          const lista = (exclusivo ? [] : (vigente.proprietarios || []))
             .filter((p) => !alienantes.has(p.cpf_cnpj))
             .concat(adquirentes.map((p) => ({
               nome_completo: p.nome_completo,
@@ -209,6 +212,20 @@
               fonte: b.rotulo + ' (adquirente)',
               trecho: p.evidencia,
             })));
+          // Quem adquire em mais de um ato aparecia uma vez por ato, com o
+          // percentual de cada um deles ("Vera Lucia 20%, 80% e 50%", mesmo CPF).
+          // Vale a entrada mais recente: e ela que retrata a titularidade de hoje.
+          const vistosCpf = new Set();
+          const semRepetir = [];
+          for (let i = lista.length - 1; i >= 0; i--) {
+            const p = lista[i];
+            if (p.cpf_cnpj) {
+              if (vistosCpf.has(p.cpf_cnpj)) continue;
+              vistosCpf.add(p.cpf_cnpj);
+            }
+            semRepetir.unshift(p);
+          }
+          vigente.proprietarios = semRepetir;
           vigente.fonteTitularidade = b.rotulo
             + (exclusivo ? ' (coube exclusivamente a)' : ' (adquirente)');
         }
@@ -892,11 +909,14 @@
         estado.certAssumida
           ? 'assumido false: nenhum ato declara certificacao do INCRA - confirme'
           : provaVigente('certificacao_incra')),
-      linha('codigo_incra', campoTexto(f.codigo_incra, set('codigo_incra'))),
-      linha('cib', campoTexto(f.cib, set('cib'), 'A0A0A0A-0'), 'nunca preencher com NIRF'),
+      linha('codigo_incra', campoTexto(f.codigo_incra, set('codigo_incra')),
+        f.codigo_incra ? provaVigente('codigo_incra') : provaVigente('codigo_incra_incompleto')),
+      linha('cib', campoTexto(f.cib, set('cib'), 'A0A0A0A-0'), provaVigente('cib')),
       linha('ccir', campoTexto(f.ccir, set('ccir'), '11 digitos'), provaVigente('ccir')),
       linha('cod_sncr', campoTexto(f.cod_sncr, set('cod_sncr'), '13 digitos'), provaVigente('cod_sncr')),
-      linha('car', campoTexto(f.car, set('car'), '41 caracteres'), provaVigente('car')),
+      linha('car', campoTexto(f.car, set('car'), '41 caracteres'),
+        (estado.vigente && estado.vigente.campos.car_suspeito)
+          ? provaVigente('car_suspeito') : provaVigente('car')),
     ];
     const finais = [
       linha('imovel_possui_nome', campoBool(f.imovel_possui_nome, set('imovel_possui_nome'))),
