@@ -160,6 +160,20 @@ antenupcial, premonitória e qualificação pessoal** entram como `ato: 6` (Outr
 É o que a ferramenta faz, registrando em cada caso o trecho que motivou a
 classificação.
 
+### 7.1. Imóvel urbano sem CCI
+
+O `cif` (Cadastro Imobiliário Fiscal, o "CCI n.º ..." da Prefeitura) é
+**obrigatório pelo próprio schema** nos atos com `motivo_envio` 1 — está na lista
+de `required` do ramo do ato novo, ao lado de `data_ato`, `dados_imovel` e
+`dados_pessoa`. No ramo do acervo (`motivo_envio` 2) não é exigido, e o campo
+aceita nulo.
+
+Há matrículas urbanas em que a designação cadastral nunca foi averbada, e então
+não há o que ler. **Decisão da serventia (17/08/2026):** nesses casos o campo vai
+com **`"0"`**. A ferramenta preenche automaticamente e diz na tela que assumiu,
+porque o número pode existir no cadastro da Prefeitura sem estar averbado — se
+existir, basta digitar por cima.
+
 ## 8. Armadilhas do texto da matrícula
 
 - **Caixa inconsistente no cabeçalho.** Uma das matrículas tem `AV.38` e `Av.39` no mesmo
