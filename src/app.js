@@ -994,8 +994,7 @@
     if (!chave) return '';
     const achado = estado.vigente && estado.vigente.campos[chave];
     if (!achado) return '';
-    return '. NAO esta ausente na matricula: o ' + campo + ' foi encontrado como "'
-      + achado.valor + '" (' + achado.rotulo + ')';
+    return '. ' + achado.rotulo + ': "' + achado.valor + '" - confira no SIGEF';
   }
 
   function provaVigente(campo) {

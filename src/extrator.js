@@ -386,8 +386,7 @@
         // caracteres - falta um digito no documento). Nao completo nada: mostro
         // o que esta escrito e digo o que falta, para conferencia no SIGEF.
         out.codigo_incra_incompleto = achado(limpo, m[0],
-          'a certificacao tem ' + limpo.length + ' caracteres e o layout espera 32 '
-          + '(UUID) - confira o numero no SIGEF antes de preencher');
+          'o campo INCRA deve ter 32 caracteres, atualmente tem ' + limpo.length);
       }
     }
 
