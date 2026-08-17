@@ -994,7 +994,8 @@
     if (!chave) return '';
     const achado = estado.vigente && estado.vigente.campos[chave];
     if (!achado) return '';
-    return '. ' + achado.rotulo + ': "' + achado.valor + '" - confira no SIGEF';
+    const frase = achado.rotulo.charAt(0).toUpperCase() + achado.rotulo.slice(1);
+    return '. ' + frase + ': "' + achado.valor + '" - confira no SIGEF';
   }
 
   function provaVigente(campo) {
@@ -1204,6 +1205,124 @@
     $('#resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // ------------------------------------------- mensagens em portugues de gente
+
+  /**
+   * Nome de cada campo como o oficial o conhece. O nome tecnico continua ao
+   * lado, porque e ele que aparece no formulario e no arquivo enviado - mas quem
+   * le a pendencia nao deveria precisar dele para entender o que fazer.
+   */
+  const NOME_DO_CAMPO = {
+    numero_matricula: 'numero da matricula', data_matricula: 'data de abertura da matricula',
+    numero_transcricao: 'numero da transcricao', data_transcricao: 'data da transcricao',
+    cnm: 'CNM (codigo nacional de matricula)', situacao: 'situacao da matricula',
+    tipo_imovel: 'tipo do imovel (rural ou urbano)',
+    tipo_matricula_transcricao: 'matricula ou transcricao',
+    contexto_urbano: 'contexto do imovel urbano', contexto_rural: 'contexto do imovel rural',
+    regime_utilizacao: 'regime de utilizacao', georreferenciamento: 'imovel georreferenciado',
+    certificacao_incra: 'imovel certificado pelo INCRA',
+    codigo_incra: 'codigo da certificacao do INCRA',
+    sistema_referencia: 'sistema de referencia (DATUM)',
+    sistema_coordenadas: 'sistema de coordenadas', fuso_zona: 'fuso / zona',
+    centroide: 'centroide', cib: 'CIB (cadastro na Receita Federal)',
+    cif: 'CIF / CCI (cadastro na Prefeitura)', ccir: 'CCIR (certificado do INCRA)',
+    cod_sncr: 'codigo do imovel rural no INCRA', car: 'CAR (cadastro ambiental rural)',
+    nirf: 'NIRF', imovel_possui_nome: 'o imovel tem nome', nome_imovel: 'nome do imovel',
+    area_terreno_total: 'area total do imovel', area_construida: 'area construida',
+    area_m2: 'area do terreno em m2', livro_matricula: 'livro', folha_matricula: 'folha',
+    dados_imovel: 'endereco do imovel', tipo_logradouro: 'tipo do logradouro',
+    logradouro: 'logradouro', numero_logradouro: 'numero na via',
+    complemento: 'complemento', bairro: 'bairro', cep: 'CEP',
+    cod_ibge_municipio: 'codigo IBGE do municipio', uf: 'UF',
+    motivo_envio: 'motivo do envio', tipo_ato: 'registro ou averbacao',
+    numero_ato: 'numero do ato', ato: 'natureza do ato', data_ato: 'data do ato',
+    protocolo_prenotacao: 'numero do protocolo',
+    data_protocolo_prenotacao: 'data do protocolo',
+    alteracao_titularidade: 'forma de transmissao', alteracao_imovel: 'forma de alteracao',
+    valor_transacao: 'valor do negocio', valor_imposto: 'imposto recolhido',
+    base_calculo_itbi: 'base de calculo do ITBI', dados_pessoa: 'partes do ato',
+    nome_completo: 'nome', cpf_cnpj: 'CPF/CNPJ', percentual: 'percentual',
+    estado_civil: 'estado civil', regime_bens: 'regime de bens',
+    relacao_juridica: 'relacao juridica', condicao_parte: 'condicao da parte',
+    data_inicio_rel_juridica: 'data de inicio da relacao juridica',
+    estrangeiro: 'estrangeiro', decisao_jud: 'decisao judicial',
+  };
+
+  /**
+   * Traduz o motivo tecnico para uma frase de cartorio. As condicoes do manual
+   * vem escritas como "obrigatorio se motivo_envio = 1"; quem le precisa saber
+   * o que isso quer dizer, nao o numero do enum.
+   */
+  const MOTIVOS_LEGIVEIS = [
+    [/^campo obrigatorio ausente$/, 'falta preencher'],
+    [/^sempre obrigatorio \(true\/false\)$/, 'e sempre exigido - responda Sim ou Nao'],
+    [/^sempre obrigatorio \(1 matricula \/ 2 transcricao\)$/,
+      'e sempre exigido - diga se o folio e matricula ou transcricao'],
+    [/^sempre obrigatorio \(pelo menos um endereco\)$/, 'e sempre exigido: o imovel precisa de endereco'],
+    [/^sempre obrigatorio \(7 digitos\)$/, 'e sempre exigido (7 digitos)'],
+    [/^sempre obrigatorio \(2 digitos\)$/, 'e sempre exigido (2 digitos)'],
+    [/^sempre obrigatorio$/, 'e sempre exigido'],
+    [/^obrigatorio se motivo_envio = 1$/,
+      'e exigido nos atos praticados a partir de 02/12/2025 (os anteriores vao como acervo)'],
+    [/^obrigatorio se certificacao_incra = true$/,
+      'e exigido porque a matricula declara o imovel certificado pelo INCRA'],
+    [/^obrigatorio se imovel_possui_nome = true$/, 'e exigido porque o imovel tem nome'],
+    [/^obrigatorio se tipo_matricula_transcricao = 1$/, 'e exigido quando o folio e matricula'],
+    [/^obrigatorio se tipo_matricula_transcricao = 2$/, 'e exigido quando o folio e transcricao'],
+    [/^obrigatorio se ato = 4$/, 'e exigido em ato de transmissao'],
+    [/^obrigatorio se ato = 5$/, 'e exigido em ato que altera o imovel'],
+    [/^obrigatorio no imovel urbano \(exigido pelo schema\)$/, 'e exigido em imovel urbano'],
+    [/^obrigatorio se estado_civil = 2 \(casado\) ou 6 \(uniao estavel\)$/,
+      'e exigido porque a parte e casada ou vive em uniao estavel'],
+    [/^ato = 4 exige pelo menos 1 alienante \(condicao_parte = 1\)$/,
+      'todo ato de transmissao precisa de quem transmite'],
+    [/^ato = 4 exige pelo menos 1 adquirente \(condicao_parte = 2\)$/,
+      'todo ato de transmissao precisa de quem adquire'],
+    [/^obrigatorio se motivo_envio = 1 \(exceto alienante\)$/,
+      'e exigido de quem nao e alienante, nos atos a partir de 02/12/2025'],
+    [/^sempre obrigatorio \(pelo menos uma pessoa\)$/,
+      'todo ato precisa de ao menos uma pessoa vinculada'],
+    [/excede (\d+) caracteres \(tem (\d+)\)/, 'passou do limite de $1 caracteres (tem $2)'],
+    [/^precisa de pelo menos (\d+) item\(ns\)$/, 'precisa de ao menos $1 item'],
+  ];
+
+  function motivoLegivel(motivo) {
+    let t = String(motivo || '');
+    for (const [re, troca] of MOTIVOS_LEGIVEIS) {
+      if (re.test(t)) { t = t.replace(re, troca); break; }
+    }
+    // Sobras tecnicas que aparecem no meio de mensagens compostas.
+    return t.replace(/\bmotivo_envio = 1\b/g, 'ato novo (a partir de 02/12/2025)')
+      .replace(/\bcertificacao_incra = true\b/g, 'imovel certificado pelo INCRA')
+      .replace(/\bimovel_possui_nome = true\b/g, 'imovel com nome')
+      .replace(/\bato = 4\b/g, 'ato de transmissao')
+      .replace(/\bato = 5\b/g, 'ato que altera o imovel')
+      // Motivos compostos (a condicao mais uma explicacao) nao casam os padroes
+      // inteiros acima: aqui so o "obrigatorio" e trocado, e o resto da frase
+      // segue como o manual escreveu.
+      .replace(/\bobrigatorio se\b/g, 'e exigido em')
+      .replace(/\bobrigatorio\b/g, 'exigido');
+  }
+
+  /** "codigo_incra" -> "codigo da certificacao do INCRA". */
+  function nomeLegivel(campo) {
+    const nome = campoDoCaminho(campo);
+    return NOME_DO_CAMPO[nome] || nome;
+  }
+
+  /**
+   * Linha de pendencia como o oficial le: o nome do campo em portugues, o nome
+   * tecnico ao lado (e o que esta no formulario) e a frase do porque.
+   */
+  function linhaPendencia(campo, motivo, complemento, classe) {
+    const tecnico = campoDoCaminho(campo);
+    const nome = nomeLegivel(campo);
+    const partes = [el('b', { textContent: nome.charAt(0).toUpperCase() + nome.slice(1) }), ' '];
+    if (nome !== tecnico) partes.push(el('code', { textContent: tecnico }), ' ');
+    partes.push('- ' + motivoLegivel(motivo) + (complemento || ''));
+    return el('li', classe ? { className: classe } : {}, partes);
+  }
+
   /**
    * Campos que descrevem o IMOVEL e por isso se repetem em todos os atos do
    * arquivo. Um erro em qualquer um deles se resolve uma vez, na ficha do
@@ -1242,7 +1361,10 @@
       const nome = campoDoCaminho(campo);
       const g = imovel.get(nome)
         || { campo: nome, motivos: [], atosSchema: new Set(), atosRegra: new Set() };
-      if (motivo && g.motivos.indexOf(motivo) < 0) g.motivos.push(motivo);
+      // Cada motivo e traduzido ANTES de juntar: unidos, nenhuma das frases
+      // casaria o padrao e "campo obrigatorio ausente" ficava cru na tela.
+      const frase = motivoLegivel(motivo);
+      if (frase && g.motivos.indexOf(frase) < 0) g.motivos.push(frase);
       if (ondeSchema) g.atosSchema.add(ondeSchema);
       if (ondeRegra) g.atosRegra.add(ondeRegra);
       imovel.set(nome, g);
@@ -1265,7 +1387,7 @@
 
     const lista = Array.from(imovel.values()).map((g) => ({
       campo: g.campo,
-      motivo: g.motivos.join('; '),
+      motivo: g.motivos.join(' - '),
       atos: Math.max(g.atosSchema.size, g.atosRegra.size),
     }));
     return { imovel: lista, errosAto, porAto };
@@ -1308,9 +1430,8 @@
         + ' campo(s) a resolver (valem para todos os atos)' }));
       const ul = el('ul', { className: 'erros' });
       for (const g of doImovel.imovel) {
-        ul.appendChild(el('li', {}, [el('code', { textContent: g.campo }),
-          ' - ' + g.motivo + explicaAusente(g.campo)
-          + ' [corrija uma vez em "Dados do imovel"; afeta ' + g.atos + ' ato(s)]']));
+        ul.appendChild(linhaPendencia(g.campo, g.motivo, explicaAusente(g.campo)
+          + '. Corrija uma vez em "Dados do imovel": vale para os ' + g.atos + ' atos.'));
       }
       d.appendChild(ul);
       alvo.appendChild(d);
@@ -1322,8 +1443,9 @@
         + doImovel.errosAto.length + ')' }));
       const ul = el('ul', { className: 'erros' });
       for (const e of doImovel.errosAto.slice(0, 200)) {
-        ul.appendChild(el('li', {}, [el('code', { textContent: e.path || '(raiz)' }),
-          ' - ' + e.message + explicaAusente(e.path)]));
+        const li = linhaPendencia(e.path, e.message, explicaAusente(e.path));
+        li.appendChild(el('small', { className: 'evidencia', textContent: ' (em ' + e.path + ')' }));
+        ul.appendChild(li);
       }
       if (doImovel.errosAto.length > 200) {
         ul.appendChild(el('li', { textContent: '... e mais ' + (doImovel.errosAto.length - 200) }));
@@ -1339,11 +1461,10 @@
         + ' pendencia(s), ' + item.avisos.length + ' aviso(s)' }));
       const ul = el('ul', { className: 'erros' });
       for (const p of item.pendencias) {
-        ul.appendChild(el('li', {}, [el('code', { textContent: p.campo }),
-          ' - ' + p.motivo + explicaAusente(p.campo)]));
+        ul.appendChild(linhaPendencia(p.campo, p.motivo, explicaAusente(p.campo)));
       }
       for (const av of item.avisos) {
-        ul.appendChild(el('li', { className: 'aviso-item' }, [el('code', { textContent: av.campo }), ' - ' + av.motivo]));
+        ul.appendChild(linhaPendencia(av.campo, av.motivo, '', 'aviso-item'));
       }
       d.appendChild(ul);
       alvo.appendChild(d);
