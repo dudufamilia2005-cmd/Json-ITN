@@ -1204,36 +1204,135 @@
     $('#resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  /**
+   * Campos que descrevem o IMOVEL e por isso se repetem em todos os atos do
+   * arquivo. Um erro em qualquer um deles se resolve uma vez, na ficha do
+   * imovel. O que nao esta aqui e proprio do ato (partes, valores, protocolo,
+   * data, tipo) e continua apontado ato a ato.
+   */
+  const CAMPOS_DO_IMOVEL = new Set(['numero_matricula', 'data_matricula', 'numero_transcricao',
+    'data_transcricao', 'cnm', 'situacao', 'tipo_imovel', 'tipo_matricula_transcricao',
+    'contexto_urbano', 'contexto_rural', 'regime_utilizacao', 'georreferenciamento',
+    'certificacao_incra', 'codigo_incra', 'sistema_referencia', 'sistema_coordenadas',
+    'fuso_zona', 'centroide', 'cib', 'cif', 'ccir', 'cod_sncr', 'car', 'nirf',
+    'imovel_possui_nome', 'nome_imovel', 'area_terreno_total', 'area_construida',
+    'livro_matricula', 'folha_matricula', 'dados_imovel', 'tipo_logradouro', 'logradouro',
+    'numero_logradouro', 'complemento', 'bairro', 'cep', 'cod_ibge_municipio', 'uf', 'area_m2']);
+
+  /** Nome do campo no fim de um caminho ("imoveis[0].dados_imovel[0].cep" -> "cep"). */
+  function campoDoCaminho(caminho) {
+    return String(caminho || '').replace(/\[\d+\]/g, '').split('.').pop();
+  }
+
+  function ehCampoDoImovel(campo) {
+    return CAMPOS_DO_IMOVEL.has(campoDoCaminho(campo));
+  }
+
+  /**
+   * Reune, numa linha por campo, o que se repete em todos os atos; devolve o
+   * resto intacto. Nao muda a validacao - so a forma de apontar.
+   */
+  function agrupaPorCampoDoImovel(erros, relatorio) {
+    // Uma linha por CAMPO, nao por mensagem: o mesmo codigo_incra aparece como
+    // pendencia da regra ("obrigatorio se certificacao_incra = true") e como
+    // erro do schema ("campo obrigatorio ausente"), e para quem corrige e um
+    // campo so. Os dois motivos ficam na mesma linha.
+    const imovel = new Map();
+    const somaImovel = (campo, motivo, ondeSchema, ondeRegra) => {
+      const nome = campoDoCaminho(campo);
+      const g = imovel.get(nome)
+        || { campo: nome, motivos: [], atosSchema: new Set(), atosRegra: new Set() };
+      if (motivo && g.motivos.indexOf(motivo) < 0) g.motivos.push(motivo);
+      if (ondeSchema) g.atosSchema.add(ondeSchema);
+      if (ondeRegra) g.atosRegra.add(ondeRegra);
+      imovel.set(nome, g);
+    };
+
+    const errosAto = (erros || []).filter((e) => {
+      if (!ehCampoDoImovel(e.path)) return true;
+      const item = (String(e.path || '').match(/^imoveis\[(\d+)\]/) || [])[1];
+      somaImovel(e.path, e.message, item != null ? item : '?', null);
+      return false;
+    });
+
+    const porAto = (relatorio || []).map((item) => Object.assign({}, item, {
+      pendencias: item.pendencias.filter((p) => {
+        if (!ehCampoDoImovel(p.campo)) return true;
+        somaImovel(p.campo, p.motivo, null, item.ato);
+        return false;
+      }),
+    }));
+
+    const lista = Array.from(imovel.values()).map((g) => ({
+      campo: g.campo,
+      motivo: g.motivos.join('; '),
+      atos: Math.max(g.atosSchema.size, g.atosRegra.size),
+    }));
+    return { imovel: lista, errosAto, porAto };
+  }
+
   function renderResultado() {
     const alvo = $('#resultado');
     alvo.textContent = '';
     const r = estado.resultado;
     if (!r) return;
 
-    const totalPend = r.relatorio.reduce((s, x) => s + x.pendencias.length, 0);
     const erros = r.validacao.erros;
+    // O layout repete os dados do imovel dentro de CADA ato, entao um campo
+    // errado na ficha do imovel viraria uma linha por ato (nove atos, nove
+    // vezes a mesma coisa). A validacao continua ato a ato; aqui as ocorrencias
+    // do mesmo campo do imovel sao reunidas numa linha, dizendo quantos atos
+    // ela afeta e onde se corrige. O que e proprio do ato continua no ato.
+    const doImovel = agrupaPorCampoDoImovel(erros, r.relatorio);
 
-    const status = el('div', { className: 'status ' + (erros.length === 0 && totalPend === 0 ? 'ok' : 'bad') });
-    status.textContent = erros.length === 0 && totalPend === 0
-      ? 'Pronto para envio: ' + r.arquivo.imoveis.length + ' ato(s), 0 pendencia, 0 erro de schema.'
-      : r.arquivo.imoveis.length + ' ato(s) - ' + totalPend + ' pendencia(s) de regra e '
-        + erros.length + ' erro(s) de schema. Resolva antes de enviar.';
+    const errosAto = doImovel.errosAto.length;
+
+    const pendAto = doImovel.porAto.reduce((s, x) => s + x.pendencias.length, 0);
+    const partes = [];
+    if (doImovel.imovel.length) partes.push(doImovel.imovel.length + ' campo(s) na ficha do imovel');
+    if (pendAto) partes.push(pendAto + ' pendencia(s) em ato(s)');
+    if (errosAto) partes.push(errosAto + ' erro(s) de schema em ato(s)');
+
+    const status = el('div', { className: 'status ' + (partes.length ? 'bad' : 'ok') });
+    const lista = partes.length > 1
+      ? partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1]
+      : partes[0];
+    status.textContent = partes.length
+      ? r.arquivo.imoveis.length + ' ato(s) - ' + lista + ' a resolver.'
+      : 'Pronto para envio: ' + r.arquivo.imoveis.length + ' ato(s), 0 pendencia, 0 erro de schema.';
     alvo.appendChild(status);
 
-    if (erros.length) {
+    if (doImovel.imovel.length) {
       const d = el('details', { open: true });
-      d.appendChild(el('summary', { textContent: 'Erros de schema (' + erros.length + ')' }));
+      d.appendChild(el('summary', { textContent: 'Dados do imovel - ' + doImovel.imovel.length
+        + ' campo(s) a resolver (valem para todos os atos)' }));
       const ul = el('ul', { className: 'erros' });
-      for (const e of erros.slice(0, 200)) {
-        ul.appendChild(el('li', {}, [el('code', { textContent: e.path || '(raiz)' }),
-          ' - ' + e.message + explicaAusente(e.path)]));
+      for (const g of doImovel.imovel) {
+        ul.appendChild(el('li', {}, [el('code', { textContent: g.campo }),
+          ' - ' + g.motivo + explicaAusente(g.campo)
+          + ' [corrija uma vez em "Dados do imovel"; afeta ' + g.atos + ' ato(s)]']));
       }
-      if (erros.length > 200) ul.appendChild(el('li', { textContent: '... e mais ' + (erros.length - 200) }));
       d.appendChild(ul);
       alvo.appendChild(d);
     }
 
-    for (const item of r.relatorio) {
+    if (doImovel.errosAto.length) {
+      const d = el('details', { open: true });
+      d.appendChild(el('summary', { textContent: 'Erros de schema nos atos ('
+        + doImovel.errosAto.length + ')' }));
+      const ul = el('ul', { className: 'erros' });
+      for (const e of doImovel.errosAto.slice(0, 200)) {
+        ul.appendChild(el('li', {}, [el('code', { textContent: e.path || '(raiz)' }),
+          ' - ' + e.message + explicaAusente(e.path)]));
+      }
+      if (doImovel.errosAto.length > 200) {
+        ul.appendChild(el('li', { textContent: '... e mais ' + (doImovel.errosAto.length - 200) }));
+      }
+      d.appendChild(ul);
+      alvo.appendChild(d);
+    }
+
+    for (const item of doImovel.porAto) {
       if (!item.pendencias.length && !item.avisos.length) continue;
       const d = el('details', { open: item.pendencias.length > 0 });
       d.appendChild(el('summary', { textContent: item.ato + ' - ' + item.pendencias.length
