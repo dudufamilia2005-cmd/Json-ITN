@@ -277,7 +277,22 @@
     if (!atoClassificado || !atoClassificado.ato || atoClassificado.ato.valor !== 4) return null;
     const candidatos = valoresRotulados(textoAto)
       .filter((c) => c.moeda === 'R$' || c.rotulado);
-    if (!candidatos.length) return null;
+    if (!candidatos.length) {
+      // Divisao amigavel nao tem preco: nao ha compra, ha repartição do que ja
+      // era dos condominos. O que o ato declara e a base de calculo do ITBI (na
+      // 28.501, R$350.000,00, com isencao do imposto). Decisao da serventia
+      // (17/08/2026): e ela que vai como valor do negocio.
+      const rotulo = (atoClassificado.ato.rotulo || '')
+        + ' ' + ((atoClassificado.alteracao_titularidade || {}).rotulo || '');
+      if (/divisao amigavel/i.test(rotulo)) {
+        const base = extraiImpostos(textoAto).base_calculo_itbi;
+        if (base) {
+          return achado(base.valor, base.trecho,
+            'base de calculo do ITBI (divisao amigavel nao tem preco)');
+        }
+      }
+      return null;
+    }
     const preferido = candidatos.find((c) => c.rotulado) || candidatos[0];
     return achado(preferido.valor, preferido.trecho,
       preferido.moeda === 'R$' ? 'valor do negocio' : 'valor do negocio em ' + preferido.moeda);
@@ -970,6 +985,27 @@
       });
       // Guarda o titular do casal para o conjuge que venha em seguida.
       if (!(achadoNome && achadoNome.conjuge)) titular = pessoas[pessoas.length - 1];
+    }
+
+    // Divisao amigavel RECIPROCA: "celebrada entre as outorgantes e
+    // RECIPROCAMENTE OUTORGADAS". Cada condomino transmite a parte que cede e
+    // adquire o quinhao que recebe - as duas coisas, no mesmo ato. Como
+    // condicao_parte aceita um valor por pessoa, cada um entra duas vezes
+    // (decisao da serventia, 17/08/2026).
+    // So quando o ato NAO atribui os quinhoes: se ele diz a quem cabe (o "coube
+    // exclusivamente" da 15.733), quem recebe e adquirente e quem sai e
+    // alienante, e nao ha reciprocidade a declarar.
+    if (/reciprocamente outorgad/i.test(t)
+      && !/\b(coube|couberam|cabendo|cabera|caberao)\b/.test(kt)) {
+      const reciprocas = [];
+      for (const p of pessoas) {
+        if (!p.cpf_cnpj || p.representante_legal) { reciprocas.push(p); continue; }
+        reciprocas.push(Object.assign({}, p, { condicao_parte: 1,
+          papel: (p.papel || '') + ' (divisao reciproca: transmite)' }));
+        reciprocas.push(Object.assign({}, p, { condicao_parte: 2, relacao_juridica: 1,
+          papel: (p.papel || '') + ' (divisao reciproca: adquire)' }));
+      }
+      return reciprocas;
     }
     return pessoas;
   }

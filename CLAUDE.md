@@ -149,7 +149,11 @@ Documentação de origem, fora do repositório:
    descreve as glebas que ganharam matricula propria; a area desta matricula e a
    de antes da divisao. Cuidado: "procedida em virtude de desmembramento" e a
    ORIGEM da matricula, e ali a area E a do imovel (38.971).
-30. **Divisao amigavel registrada (R) transmite; averbada (AV) nao.** Na 28.501 o
+30. **Divisao amigavel registrada (R) transmite; averbada (AV) nao.** O valor do
+   negocio e a base de calculo do ITBI (nao ha preco), e na divisao RECIPROCA
+   cada condomino entra duas vezes - alienante e adquirente - porque transmite e
+   adquire no mesmo ato. Decisoes da serventia (17/08/2026), em
+   `docs/divergencias.md`, 7.2. Na 28.501 o
    R.09 registra a divisao e a AV.10 desmembra - a atribuicao dos quinhoes esta
    na averbacao, mas a transmissao e o registro.
 31. **O casal tem um estado civil e um regime, declarados no titular.** Quando a

@@ -174,6 +174,27 @@ com **`"0"`**. A ferramenta preenche automaticamente e diz na tela que assumiu,
 porque o número pode existir no cadastro da Prefeitura sem estar averbado — se
 existir, basta digitar por cima.
 
+### 7.2. Divisão amigável entre condôminos
+
+A divisão amigável não tem preço: não há compra, há repartição do que já era dos
+condôminos. O que o ato declara é a **base de cálculo do ITBI** — no R.09 da
+28.501, R$350.000,00, com isenção do imposto pelo art. 53, II do Código
+Tributário Municipal.
+
+**Decisão da serventia (17/08/2026):** é essa base que vai como `valor_transacao`.
+O campo mostra de onde veio ("base de calculo do ITBI (divisao amigavel nao tem
+preco)").
+
+A outra dificuldade é a **reciprocidade**. A escritura diz "celebrada entre as
+outorgantes e reciprocamente outorgadas": cada condômino transmite a parte que
+cede e adquire o quinhão que recebe, no mesmo ato. Como `condicao_parte` aceita
+um valor por pessoa, **cada condômino entra duas vezes** — uma como alienante,
+outra como adquirente, com o mesmo CPF (decisão da serventia, 17/08/2026).
+
+Isso vale só quando o ato **não** atribui os quinhões. Quando ele diz a quem cabe
+(o "coube exclusivamente" do R-2 da 15.733), quem recebe é adquirente e quem sai
+é alienante — não há reciprocidade a declarar.
+
 ## 8. Armadilhas do texto da matrícula
 
 - **Caixa inconsistente no cabeçalho.** Uma das matrículas tem `AV.38` e `Av.39` no mesmo
