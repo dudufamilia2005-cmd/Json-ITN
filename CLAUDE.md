@@ -115,7 +115,7 @@ Documentação de origem, fora do repositório:
 23. **Divisão amigável é transmissão só quando atribui quinhão** (ato 4,
    `alteracao_titularidade` 16). A que apenas parte o imóvel em glebas e encerra
    a matrícula (AV.51 da 1.999) é desmembramento, ato 5 — e não pede
-   `valor_transacao`. O que separa as duas é o "coube" no texto. Além disso, o
+   `valor_transacao`. O que separa as duas é o "coube" no texto - e, faltando ele, se o ato é registro ou averbação (ver 30). Além disso, o
    "coube **exclusivamente** aos condôminos" substitui a titularidade em vez de
    somar. Sem isso o condômino que saiu ficava dono para sempre — a divisão o
    cita como "acima qualificado", sem repetir o CPF, e ele nunca entrava na
@@ -141,6 +141,21 @@ Documentação de origem, fora do repositório:
    (17/08/2026). O campo é exigido pelo próprio schema no ramo do ato novo
    (`motivo_envio` 1) e não há o que ler quando a designação cadastral nunca foi
    averbada. Fica dito na tela que foi assumido. Ver `docs/divergencias.md`, 7.1.
+
+28. **A NOTA do ato explica, nao qualifica partes.** No inventario da 28.501 ela
+   cita sete CPF de cedentes de direitos hereditarios, que ja cederam - e todos
+   herdavam o "ADQUIRENTE:" da frase anterior, entrando na titularidade.
+29. **A area do ato que DESMEMBRA e dos imoveis novos.** "foi DESMEMBRADO em"
+   descreve as glebas que ganharam matricula propria; a area desta matricula e a
+   de antes da divisao. Cuidado: "procedida em virtude de desmembramento" e a
+   ORIGEM da matricula, e ali a area E a do imovel (38.971).
+30. **Divisao amigavel registrada (R) transmite; averbada (AV) nao.** Na 28.501 o
+   R.09 registra a divisao e a AV.10 desmembra - a atribuicao dos quinhoes esta
+   na averbacao, mas a transmissao e o registro.
+31. **O casal tem um estado civil e um regime, declarados no titular.** Quando a
+   qualificacao dele e longa - 429 caracteres na 39.492, por causa do pacto
+   antenupcial citado no meio - a janela do conjuge nao alcanca o "casado" e
+   ainda le "Pacto Antenupcial" como se fosse o regime dela.
 
 ## Estado atual
 

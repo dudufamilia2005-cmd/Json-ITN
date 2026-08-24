@@ -117,17 +117,28 @@
     { re: /(desapropriacao)/, ato: 4, alteracao_titularidade: 17, rotulo: 'desapropriacao' },
     { re: /(venda e compra|compra e venda|compra a venda|adquiriu por compra)/,
       ato: 4, alteracao_titularidade: 1, rotulo: 'compra e venda' },
-    { re: /(inventario\/partilha|formal de partilha|adjudicacao|arrolamento dos bens)/,
+    // "INVENTARIO/ADJUDCACAO" existe assim no acervo, sem o "i" - o titulo do
+    // ato e digitado a mao, e o padrao aceita as duas grafias.
+    { re: /(inventario\s*\/\s*(?:partilha|adjud\w*)|formal de partilha|adjudicacao|adjudcacao|arrolamento dos bens)/,
       ato: 4, alteracao_titularidade: 9, rotulo: 'partilha/adjudicacao por obito' },
+    // Caracterizacao do imovel (art. 213, I, "b"): e o ato que descreve o imovel
+    // como ele e hoje - area, numero na rua, lote e quadra saem dele.
+    { re: /caracterizacao do imovel/, ato: 5, alteracao_imovel: 10,
+      rotulo: 'caracterizacao do imovel (retificacao)' },
     // Divisao amigavel e transmissao SO quando atribui a alguem ("coube
     // exclusivamente aos condominos: X e Y"): ali o quinhao dos outros muda de
     // mao, e o enum nao tem item proprio - 16 e "outras nao onerosas".
     // A divisao que apenas parte o imovel em glebas e encerra a matricula
     // (AV.51 da 1.999, "DIVISAO AMIGAVEL/DESMEMBRAMENTO") nao transmite nada:
     // cai na regra de desmembramento, ato 5, e nao pede valor_transacao.
-    { re: /divisao amigavel[\s\S]{0,3000}?(coube|couberam|cabendo)/,
+    { re: /divisao amigavel[\s\S]{0,3000}?(coube|couberam|cabendo|cabera)/,
       ato: 4, alteracao_titularidade: 16,
       rotulo: 'divisao amigavel com atribuicao de quinhao' },
+    // Divisao amigavel REGISTRADA (R.xx) e a transmissao em si, mesmo quando a
+    // atribuicao dos quinhoes esta na averbacao seguinte (R.09 da 28.501, com a
+    // AV.10 desmembrando). Averbacao nao transmite; registro transmite.
+    { re: /divisao amigavel/, ato: 4, alteracao_titularidade: 16, soRegistro: true,
+      rotulo: 'divisao amigavel registrada (extincao de condominio)' },
     { re: /partilha por divorcio/, ato: 4, alteracao_titularidade: 10 },
     { re: /dissolucao de uniao estavel/, ato: 4, alteracao_titularidade: 11 },
     { re: /(doacao|escritura publica de doacao)/, ato: 4, alteracao_titularidade: 6 },
@@ -179,8 +190,12 @@
     return semCabecalho.slice(0, 120);
   }
 
-  function classificaAto(textoAto) {
+  function classificaAto(textoAto, tipoAto) {
     const titulo = tituloDoAto(textoAto);
+    // Registro ou averbacao, deduzido do proprio cabecalho quando nao vem dado:
+    // ha regra que so vale em registro, porque averbacao nao transmite.
+    const tipo = tipoAto != null ? tipoAto
+      : (/^[\s>*]*(?:R|REGISTRO)\b/i.test(String(textoAto || '').trim()) ? 1 : 2);
     // A escritura de "doacao da parte disponivel COM RESERVA DE USUFRUTO" gera
     // DOIS atos com o mesmo titulo: um registra a doacao da nua propriedade
     // (transmissao) e o outro registra o usufruto reservado. Quem separa os dois
@@ -200,6 +215,8 @@
     for (const escopo of [{ txt: titulo, onde: 'titulo do ato' }, { txt: textoAto, onde: 'corpo do ato' }]) {
       const k = chave(escopo.txt);
       for (const regra of REGRAS_ATO) {
+        // Regra que so vale em REGISTRO (a averbacao nao transmite).
+        if (regra.soRegistro && tipo !== 1) continue;
         const m = k.match(regra.re);
         if (!m) continue;
         const evidencia = escopo.onde === 'titulo do ato'
@@ -579,6 +596,11 @@
     { re: /(?:Avalista\(s\)|Avalistas?|Intervenientes? [Gg]arantes?|interveniente garantidora)\s*:?/gi,
       relacao_juridica: 18, rotulo: 'avalista/garante' },
     { re: /C[ôo]njuge\s*:/gi, rotulo: 'conjuge' },
+    // A NOTA do ato explica o negocio; nao qualifica partes. No inventario da
+    // 28.501 ela cita sete CPF de cedentes de direitos hereditarios, que ja
+    // cederam e nao sao partes do registro - e todos herdavam o "ADQUIRENTE:"
+    // da frase anterior, entrando na titularidade do imovel.
+    { re: /\*?\s*NOTAS?\s*:/gi, nota: true, rotulo: 'nota do ato (nao qualifica partes)' },
   ];
 
   // Alem das palavras inteiras, as ABREVIATURAS de documento: o acervo escreve
@@ -823,6 +845,9 @@
     const pctParaCada = mCada ? numeroBR(mCada[1]) : null;
 
     const pessoas = [];
+    // Ultima pessoa que NAO foi citada como conjuge: e nela que o estado civil e
+    // o regime do casal estao declarados.
+    let titular = null;
     const vistos = new Set();
     RE_DOC.lastIndex = 0;
     let m;
@@ -842,6 +867,8 @@
         if (/^\s*[.\-]?\s*\d/.test(depois)) continue;
       }
       const papel = papelDe(m.index);
+      // Documento citado dentro da NOTA do ato: e mencao, nao parte.
+      if (papel && papel.nota) continue;
       const marca = marcaDe(m.index);
       // Janela limitada ao pedaco da propria pessoa (ver janelaDaPessoa).
       const jp = janelaDaPessoa(t, m.index, 320, 320);
@@ -889,6 +916,25 @@
 
       const ec = estadoCivilDe(janela);
       const rb = regimeBensDe(janela, dataDoAto);
+      // O casal tem um estado civil e um regime, declarados uma vez, no titular.
+      // Quando a qualificacao dele e longa - "casado sob o regime da comunhao
+      // universal [...] conforme escritura de Pacto Antenupcial lavrada no
+      // Cartorio [...], com Clarinda" sao 429 caracteres - a janela do conjuge
+      // nao alcanca o "casado" e ainda pega "Pacto Antenupcial" como se fosse o
+      // regime dele. Nesse caso vale o que foi declarado para o titular.
+      if (achadoNome && achadoNome.conjuge && titular) {
+        if (ec.estado_civil == null && titular.estado_civil != null) {
+          ec.estado_civil = titular.estado_civil;
+          ec.trecho = (titular.evidencia_estado_civil || '') + ' (declarado para o casal)';
+        }
+        if (titular.regime_bens != null
+          && (rb.regime_bens == null || rb.regime_bens === 6 || rb.presumido)) {
+          rb.regime_bens = titular.regime_bens;
+          rb.presumido = !!titular.regime_presumido;
+          rb.ambiguo = false;
+          rb.trecho = (titular.evidencia_regime || '') + ' (declarado para o casal)';
+        }
+      }
       const pct = percentualDe(janelaPct);
       const ehPJ = digitos.length === 14;
 
@@ -922,6 +968,8 @@
         evidencia_regime: rb.trecho || null,
         evidencia_estado_civil: ec.trecho || null,
       });
+      // Guarda o titular do casal para o conjuge que venha em seguida.
+      if (!(achadoNome && achadoNome.conjuge)) titular = pessoas[pessoas.length - 1];
     }
     return pessoas;
   }
@@ -1055,6 +1103,14 @@
     const depoisDaVia = bruto.slice(achouVia.m.index + achouVia.m[0].length, achouVia.m.index + achouVia.m[0].length + 90);
     const mNum = depoisDaVia.match(/(?:N[ºo°]\.?|n[úu]mero)\s*(\d{1,6}[A-Za-z]?)/i);
     if (mNum) out.numero_logradouro = achado(mNum[1], compacta(nomeVia + ' ' + mNum[0]), 'numero apos o logradouro');
+    // Na caracterizacao o numero vem ANTES da via, ligado a casa: "a citada casa
+    // possui o n.º 330, situado na Rua Maestro Vicente Jose Vieira".
+    if (!out.numero_logradouro) {
+      const mCasa = bruto.match(/(?:casa|pr[ée]dio|im[óo]vel|edifica[çc][ãa]o)[^.;]{0,40}?possui o n\.?[ºo°]?\s*(\d{1,6}[A-Za-z]?)/i);
+      if (mCasa) {
+        out.numero_logradouro = achado(mCasa[1], compacta(mCasa[0]), 'numero da casa na descricao');
+      }
+    }
 
     // Bairro: "Setor X", "Jardim Y", "Loteamento Z" no restante da descricao.
     const depois = bruto.slice(achouVia.m.index);
@@ -1095,6 +1151,13 @@
   function candidatosAreaUrbana(texto) {
     const t = compacta(texto);
     const saida = [];
+    // Ato de desmembramento: as areas que ele cita sao dos imoveis NOVOS, cada
+    // um com sua matricula ("Lote 15, com a area de 180,00m2, [...] constantes
+    // da matr. 39.501"). A area DESTE imovel e a de antes da divisao - na 28.501
+    // o desmembramento fazia o arquivo sair com 180m2 em vez de 360m2.
+    // Cuidado: "matricula procedida em virtude de desmembramento" e a ORIGEM da
+    // matricula, e ali a area E a do imovel. So conta o ato que efetua a divisao.
+    if (/(?:foi|fica|ficam)\s+DESMEMBRAD[OA]S?\b/i.test(t)) return saida;
     // "com a área de 246,50m2", "com área de 175,00m²" (sem o "a"),
     // "área total: 300,00m²", "medindo 360,00m2".
     let m = t.match(/(?:terreno[^.]{0,80}?)?com\s+(?:a\s+)?[áa]rea\s+de\s+([\d.]+,\d+)\s*m[²2]/i);
