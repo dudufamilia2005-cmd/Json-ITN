@@ -162,7 +162,12 @@ classificação.
 
 ### 7.1. Imóvel urbano sem CCI
 
-O `cif` (Cadastro Imobiliário Fiscal, o "CCI n.º ..." da Prefeitura) é
+**CCI é o Certificado de Cadastro Imobiliário do imóvel** — a designação
+cadastral que o Município atribui, a mesma do IPTU, e é o que a averbação de
+designação cadastral escreve na matrícula. Não confundir com cédula de crédito
+imobiliário: é título de outra natureza e não entra neste campo.
+
+O `cif` do layout (Cadastro Imobiliário Fiscal) é onde esse número vai, e é
 **obrigatório pelo próprio schema** nos atos com `motivo_envio` 1 — está na lista
 de `required` do ramo do ato novo, ao lado de `data_ato`, `dados_imovel` e
 `dados_pessoa`. No ramo do acervo (`motivo_envio` 2) não é exigido, e o campo

@@ -458,7 +458,9 @@
       if (limpo.length === 12 || limpo.length === 13) out.cod_sncr = achado(limpo, m[0], 'codigo do imovel rural');
     }
 
-    // CIF urbano: "CCI n.º 10.630" (codigo cadastral da Prefeitura) ou
+    // CIF urbano: "CCI n.º 10.630" (codigo cadastral da Prefeitura). CCI e o
+    // Certificado de Cadastro Imobiliario do imovel - nao confundir com a
+    // cedula de credito imobiliario, que nada tem a ver com este campo. Ou
     // "Cadastrado na Prefeitura sob o Nº 51/01-C.R.2ª Etapa".
     // "CCI n.º 10.630" - o "n.º" precisa ser consumido inteiro (o "º" nao e \w),
     // senao a captura para na sigla e devolve "CCI".

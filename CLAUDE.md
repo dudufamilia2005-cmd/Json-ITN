@@ -138,7 +138,9 @@ Documentação de origem, fora do repositório:
    herda o "adquirente" da frase anterior e nunca sai da titularidade.
 
 27. **Urbano sem CCI averbado sai com `cif` "0"** — decisão da serventia
-   (17/08/2026). O campo é exigido pelo próprio schema no ramo do ato novo
+   (17/08/2026). CCI é o **Certificado de Cadastro Imobiliário** do imóvel, a
+   designação cadastral do Município — não é cédula de crédito imobiliário.
+   O campo é exigido pelo próprio schema no ramo do ato novo
    (`motivo_envio` 1) e não há o que ler quando a designação cadastral nunca foi
    averbada. Fica dito na tela que foi assumido. Ver `docs/divergencias.md`, 7.1.
 

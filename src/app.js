@@ -1237,7 +1237,7 @@
     sistema_referencia: 'sistema de referencia (DATUM)',
     sistema_coordenadas: 'sistema de coordenadas', fuso_zona: 'fuso / zona',
     centroide: 'centroide', cib: 'CIB (cadastro na Receita Federal)',
-    cif: 'CIF / CCI (cadastro na Prefeitura)', ccir: 'CCIR (certificado do INCRA)',
+    cif: 'CIF / CCI - Certificado de Cadastro Imobiliario (Prefeitura)', ccir: 'CCIR (certificado do INCRA)',
     cod_sncr: 'codigo do imovel rural no INCRA', car: 'CAR (cadastro ambiental rural)',
     nirf: 'NIRF', imovel_possui_nome: 'o imovel tem nome', nome_imovel: 'nome do imovel',
     area_terreno_total: 'area total do imovel', area_construida: 'area construida',
