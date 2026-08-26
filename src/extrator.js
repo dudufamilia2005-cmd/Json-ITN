@@ -46,11 +46,14 @@
     let m = s.match(/\b(\d{2})[./](\d{2})[./](\d{4})\b/);
     if (m) return m[1] + '/' + m[2] + '/' + m[3];
     const k = chave(s);
-    const re = new RegExp('(\\d{1,2})\\s+de\\s+(' + MESES.join('|') + ')\\s+de\\s+(\\d{4})');
+    // O ano aparece com ponto de milhar nos livros antigos: "25 de abril de
+    // 1.995". Sem tolerar o ponto, a matricula ficava sem data - e sem data nao
+    // ha motivo_envio, nem data do ato, nem abertura reconhecida como ato.
+    const re = new RegExp('(\\d{1,2})\\s+de\\s+(' + MESES.join('|') + ')\\s+de\\s+(\\d{1,2}\\.?\\d{3})');
     m = k.match(re);
     if (m) {
       return String(+m[1]).padStart(2, '0') + '/'
-        + String(MESES.indexOf(m[2]) + 1).padStart(2, '0') + '/' + m[3];
+        + String(MESES.indexOf(m[2]) + 1).padStart(2, '0') + '/' + m[3].replace('.', '');
     }
     return null;
   }
@@ -65,7 +68,7 @@
     if (m) return achado(dataDeTexto(m[1]), m[0], 'Data:');
     // O dia PRECISA ter fronteira a esquerda: sem isso, o numero da matricula no cabecalho
     // faz "11 de Agosto" ser lido como "1 de Agosto" (erro real observado).
-    m = cabecalho.match(/(?:^|[^\d])(\d{1,2})\s+de\s+([A-Za-zçÀ-ÿ]+)\s+de\s+(\d{4})/i);
+    m = cabecalho.match(/(?:^|[^\d])(\d{1,2})\s+de\s+([A-Za-zçÀ-ÿ]+)\s+de\s+(\d{1,2}\.?\d{3})/i);
     if (m) return achado(dataDeTexto(m[1] + ' de ' + m[2] + ' de ' + m[3]), m[0], 'cabecalho');
     const d = dataDeTexto(cabecalho);
     if (d) return achado(d, cabecalho.slice(0, 90), 'cabecalho');
@@ -319,6 +322,11 @@
    * prioridade baixa/zero = area de parcela, garantia ou negocio.
    */
   const REGRAS_AREA = [
+    // Retificacao de area por georreferenciamento: e o dado mais atual e mais
+    // forte que a matricula tem ("que RETIFICADA passa a ter a area total de
+    // 2,6925ha"). Vence a descricao da abertura e o CCIR.
+    { re: /RETIFICADA\s+passa\s+a\s+ter\s+a\s+[áa]rea\s+(?:total\s+)?de\s+([\d.]+,\d+)\s*ha/i,
+      peso: 105, rotulo: 'area retificada por georreferenciamento' },
     { re: /remanescente\s+de\s+([\d.]+,\d+)\s*ha/i, peso: 100, rotulo: 'REMANESCENTE de' },
     // A area declarada na descricao do imovel ("IMOVEL: Fazenda X, com a area de
     // 281,5458ha") e a DESTE imovel. A area total do CCIR pode ser a do cadastro
@@ -1365,13 +1373,13 @@
     if (m && m.index < 40) {
       out.numero_matricula = achado(m[1].replace(/\D/g, ''), m[0], 'cabecalho da matricula');
     }
-    const md = t.slice(0, 200).match(/(\d{1,2}\s+de\s+[A-Za-zç]+\s+de\s+\d{4}|\d{2}[./]\d{2}[./]\d{4})/i);
+    const md = t.slice(0, 200).match(/(\d{1,2}\s+de\s+[A-Za-zçÀ-ÿ]+\s+de\s+\d{1,2}\.?\d{3}|\d{2}[./]\d{2}[./]\d{4})/i);
     if (md) {
       out.data_matricula = achado(dataDeTexto(md[1]), md[0], 'cabecalho da matricula');
     } else {
       // Matricula sem cabecalho (aberta por desmembramento): a data de abertura
       // e a do fecho do preambulo ("Morrinhos-GO, 18 de julho de 2025").
-      const mf = t.match(/Morrinhos[^,]{0,6},\s*(\d{1,2}\s+de\s+[A-Za-zçã]+\s+de\s+\d{4})/i);
+      const mf = t.match(/Morrinhos[^,]{0,6},\s*(\d{1,2}\s+de\s+[A-Za-zçãÀ-ÿ]+\s+de\s+\d{1,2}\.?\d{3})/i);
       if (mf) out.data_matricula = achado(dataDeTexto(mf[1]), mf[0], 'fecho do preambulo');
       else {
         // "Protocolo n.º 177.671, de 27.06.2025" - o mesmo padrao do protocolo

@@ -265,7 +265,10 @@
         for (const cpf of Object.keys(vigente.pessoas)) {
           const p = vigente.pessoas[cpf];
           if (!p.nome_completo) continue;
-          if (b.texto.indexOf(p.nome_completo) < 0) continue;
+          // Comparacao por chave, nao literal: a AV.02 da 11.573 escreve
+          // "DIVINA CANDIDO DA SILVA PENA" em maiusculas e a AV.04, que declara
+          // o casamento, escreve "Divina Cândido da Silva Pena".
+          if (X.chaveNome(b.texto).indexOf(X.chaveNome(p.nome_completo)) < 0) continue;
           p.estado_civil = 2;
           p.ato_estado_civil = b.rotulo + ' (casamento averbado)';
           if (rb.regime_bens != null && !rb.presumido) {

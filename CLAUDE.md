@@ -163,6 +163,13 @@ Documentação de origem, fora do repositório:
    antenupcial citado no meio - a janela do conjuge nao alcanca o "casado" e
    ainda le "Pacto Antenupcial" como se fosse o regime dela.
 
+32. **O ano vem com ponto de milhar nos livros antigos** - "25 de abril de
+   1.995". Sem tolerar o ponto, a matricula fica sem data, e sem data nao ha
+   `motivo_envio`, nem data do ato, nem abertura reconhecida como ato (11.573).
+33. **Retificacao de area por georreferenciamento vence tudo.** "que RETIFICADA
+   passa a ter a area total de 2,6925ha" e o dado mais atual da matricula - acima
+   da descricao da abertura e do CCIR.
+
 ## Estado atual
 
 Rural padrão e urbano padrão funcionam ponta a ponta (exemplos reais: matrículas
