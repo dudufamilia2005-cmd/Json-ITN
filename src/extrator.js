@@ -1275,6 +1275,50 @@
   }
 
   /** Nome normalizado para casar a tabela de titularidade com os CPF do texto. */
+  /**
+   * Nomes que o ato declara falecidos, em chave de comparacao. Tres formas no
+   * acervo: a averbacao de obito ("constar que X FALECEU"), o formal de partilha
+   * ("dos bens deixados por falecimento de X") e o espolio ("O Espolio de X").
+   * Serve para tirar da titularidade quem morreu - o ato que parte o espolio nem
+   * sempre repete o CPF do falecido.
+   */
+  function nomesDeFalecidos(textoAto) {
+    const t = compacta(textoAto);
+    const achados = [];
+    // Nome proprio, e nao "tudo ate a pontuacao": no AV.37 da 1.118 a captura
+    // larga trazia "Jose Dias de Morais ORIGEM 3" junto.
+    // As particulas tambem vem em MAIUSCULAS no acervo ("MARIA LUIZA XAVIER DE
+    // ALMEIDA E MELLO"), e o "E" sozinho nao casa "inicial + resto".
+    const NOME = '([A-ZÀ-Ý][A-Za-zÀ-ÿ\']+'
+      + '(?:\\s+(?:de|da|do|dos|das|e|DE|DA|DO|DOS|DAS|E)\\s+[A-Za-zÀ-ÿ\']+'
+      + '|\\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ\']+)+)';
+    const guarda = (bruto) => {
+      const k = chaveNome(bruto);
+      if (k && k.split(' ').length >= 2 && achados.indexOf(k) < 0) achados.push(k);
+    };
+    // O gatilho e casado sem olhar caixa ("ESPOLIO DE ALBERTO XAVIER DE MELLO"
+    // vem todo em maiusculas), mas o NOME continua exigindo inicial maiuscula -
+    // e o que separa o nome do resto da frase.
+    const reNomeInicio = new RegExp('^\\s*' + NOME);
+    for (const gatilho of [/falecimento\s+de\s+/gi, /esp[óo]lio\s+de\s+/gi]) {
+      let m;
+      gatilho.lastIndex = 0;
+      while ((m = gatilho.exec(t)) !== null) {
+        const ini = m.index + m[0].length;
+        const mm = t.slice(ini, ini + 100).match(reNomeInicio);
+        if (mm) guarda(mm[1]);
+      }
+    }
+    const reNomeFim = new RegExp(NOME + '\\s*$');
+    const reFaleceu = /FALECEU/gi;
+    let f;
+    while ((f = reFaleceu.exec(t)) !== null) {
+      const mm = t.slice(Math.max(0, f.index - 100), f.index).match(reNomeFim);
+      if (mm) guarda(mm[1]);
+    }
+    return achados;
+  }
+
   function chaveNome(nome) {
     return chave(nome)
       .replace(/\b(espolio de|de|da|do|dos|das|e)\b/g, ' ')
@@ -1407,6 +1451,7 @@
     extraiCadastros,
     extraiTitularidade,
     chaveNome,
+    nomesDeFalecidos,
     extraiConfrontantes,
     extraiGeo,
     extraiMunicipio,

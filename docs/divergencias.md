@@ -200,6 +200,39 @@ Isso vale só quando o ato **não** atribui os quinhões. Quando ele diz a quem 
 (o "coube exclusivamente" do R-2 da 15.733), quem recebe é adquirente e quem sai
 é alienante — não há reciprocidade a declarar.
 
+### 7.3. Pendência que não tem correção: a caixa "ignorar"
+
+Há erro que é do documento, não da leitura. O CPF `017.291.361-00` da abertura da
+7.676 tem dígito verificador inválido — está assim na matrícula, num ato de 1978,
+e não há como corrigi-lo sem inventar um número (que seria o CPF válido de outra
+pessoa).
+
+**Decisão da serventia (31/08/2026):** o ONR aceita esse tipo de dado em ato
+antigo. Cada pendência ganhou uma caixa **"ignorar"**; marcada, o campo vai para
+o arquivo **exatamente como está na matrícula** e a pendência sai da contagem,
+para um bloco "Pendências ignoradas". A validação continua igual — o sistema
+acusa o erro do mesmo jeito, quem decide que não há o que fazer é o escrevente.
+
+A caixa não preenche nada nem altera valor: só deixa de barrar o envio.
+
+### 7.4. Quem faleceu deixa de ser proprietário
+
+O óbito averbado tira a pessoa da titularidade **a partir do ato seguinte** — o
+próprio ato de óbito ainda a nomeia, porque ela era a dona até ali (invariante
+19). Sem isso, um proprietário morto em 1978 continuava sendo vinculado a todos
+os atos posteriores: na 7.676 o mesmo CPF inválido reaparecia em 12 atos, quando
+João Dias só é parte em 2.
+
+Duas travas contra o excesso:
+
+- os nomes saem de gatilhos escritos ("falecimento de", "espólio de", "FALECEU")
+  e são comparados por igualdade exata da chave do nome, nunca por "contém" —
+  um herdeiro homônimo do pai perderia a titularidade;
+- a remoção **nunca esvazia a titularidade**. Enquanto não há partilha, o
+  espólio é o titular: a abertura da 38.572 declara como proprietário "O Espólio
+  de Alcides Saran", e tirá-lo dali deixaria o imóvel sem dono e todo ato
+  seguinte sem parte.
+
 ## 8. Armadilhas do texto da matrícula
 
 - **Caixa inconsistente no cabeçalho.** Uma das matrículas tem `AV.38` e `Av.39` no mesmo

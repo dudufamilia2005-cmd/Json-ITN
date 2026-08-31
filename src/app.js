@@ -22,6 +22,8 @@
     fichaImovel: {},   // dados de nivel imovel (compartilhados)
     fichasAto: {},     // numero do ato -> {campos, pessoas}
     resultado: null,
+    // Pendencias que o oficial marcou como "nao ha o que fazer" (ver caixaIgnorar).
+    ignoradas: new Set(),
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -282,6 +284,37 @@
         proprietarios: (vigente.proprietarios || []).slice(),
         fonte: vigente.fonteTitularidade,
       };
+
+      // Quem morreu deixa de ser proprietario - mas SO a partir do ato seguinte:
+      // no proprio ato de obito o falecido ainda e o dono da epoca, e e ele que
+      // deve ser vinculado. Por isso a remocao vem depois do retrato.
+      // O ato que parte o espolio nem sempre cita o falecido como alienante - o
+      // formal de partilha diz apenas "dos bens deixados por falecimento de Joao
+      // Dias de Morais Pinto", sem repetir o CPF - e por isso ele ficava dono
+      // para sempre, aparecendo em atos de 2026 (7.676). A comparacao e por
+      // nome, porque e o que o ato da.
+      const falecidos = X.nomesDeFalecidos(b.texto);
+      if (falecidos.length && (vigente.proprietarios || []).length) {
+        const antes = vigente.proprietarios.length;
+        // Igualdade exata da chave do nome. Comparacao por "contem" tirava o
+        // homonimo parcial: "Jose Dias" sairia porque esta contido em "Jose Dias
+        // de Morais", e um herdeiro com o nome do pai perderia a titularidade.
+        const restantes = vigente.proprietarios.filter((p) => {
+          if (!p.nome_completo) return true;
+          const chave = X.chaveNome(p.nome_completo);
+          return !chave || falecidos.indexOf(chave) < 0;
+        });
+        // Nunca esvaziar a titularidade: enquanto nao ha partilha, o ESPOLIO e o
+        // titular. Na 38.572 o proprietario declarado na abertura e "O Espolio de
+        // Alcides Saran" - tirar o falecido ali deixaria o imovel sem dono e todo
+        // ato seguinte sem parte.
+        if (restantes.length) {
+          vigente.proprietarios = restantes;
+          if (restantes.length !== antes) {
+            vigente.fonteTitularidade = b.rotulo + ' (falecimento averbado)';
+          }
+        }
+      }
     }
 
     // Ordem dos blocos ja e cronologica: o ultimo de maior peso ganha.
@@ -386,6 +419,9 @@
     estado.situacaoEncerrada = null;
     estado.certAssumida = false;
     estado.cifAssumido = false;
+    // Ler outra matricula recomeca do zero: pendencia ignorada e decisao sobre
+    // AQUELE documento, e nao pode valer para o proximo.
+    estado.ignoradas = new Set();
     estado.cortados = [];
     const doc = P.separaDocumento(texto);
     estado.atos = doc.atos;
@@ -1339,6 +1375,40 @@
   }
 
   /**
+   * Ha pendencia que nao tem o que resolver: o CPF com digito invalido de um ato
+   * de 1988 esta errado no livro e nao ha como corrigir a matricula. Decisao da
+   * serventia (31/08/2026): nesses casos a pendencia pode ser marcada como
+   * ignorada e o arquivo sai com o dado exatamente como esta na matricula.
+   *
+   * A pendencia continua sendo levantada e mostrada - so deixa de contar como
+   * coisa a resolver, e fica registrada num bloco proprio, para conferencia.
+   */
+  function chaveIgnorada(ato, campo, motivo) {
+    return (ato || '-') + '|' + campoDoCaminho(campo) + '|' + String(motivo || '').slice(0, 60);
+  }
+
+  function ehIgnorada(ato, campo, motivo) {
+    return estado.ignoradas.has(chaveIgnorada(ato, campo, motivo));
+  }
+
+  /** Caixa que marca/desmarca a pendencia como ignorada e redesenha a tela. */
+  function caixaIgnorar(ato, campo, motivo) {
+    const chave = chaveIgnorada(ato, campo, motivo);
+    const marcada = estado.ignoradas.has(chave);
+    const cx = el('input', {
+      type: 'checkbox',
+      checked: marcada,
+      title: 'Ignorar esta pendencia: o arquivo sai com o dado como esta na matricula',
+      onchange: (ev) => {
+        if (ev.target.checked) estado.ignoradas.add(chave);
+        else estado.ignoradas.delete(chave);
+        renderResultado();
+      },
+    });
+    return el('label', { className: 'ignorar' }, [cx, ' ignorar']);
+  }
+
+  /**
    * Campos que descrevem o IMOVEL e por isso se repetem em todos os atos do
    * arquivo. Um erro em qualquer um deles se resolve uma vez, na ficha do
    * imovel. O que nao esta aqui e proprio do ato (partes, valores, protocolo,
@@ -1424,29 +1494,50 @@
 
     const errosAto = doImovel.errosAto.length;
 
-    const pendAto = doImovel.porAto.reduce((s, x) => s + x.pendencias.length, 0);
+    // Pendencias marcadas como ignoradas saem da conta: continuam listadas, num
+    // bloco proprio, mas nao contam como coisa a resolver.
+    const ignoradas = [];
+    const imovelAtivo = doImovel.imovel.filter((g) => {
+      if (!ehIgnorada('imovel', g.campo, g.motivo)) return true;
+      ignoradas.push({ ato: 'Dados do imovel', campo: g.campo, motivo: g.motivo });
+      return false;
+    });
+    const porAtoAtivo = doImovel.porAto.map((item) => Object.assign({}, item, {
+      pendencias: item.pendencias.filter((p) => {
+        if (!ehIgnorada(item.ato, p.campo, p.motivo)) return true;
+        ignoradas.push({ ato: item.ato, campo: p.campo, motivo: p.motivo });
+        return false;
+      }),
+    }));
+
+    const pendAto = porAtoAtivo.reduce((s, x) => s + x.pendencias.length, 0);
     const partes = [];
-    if (doImovel.imovel.length) partes.push(doImovel.imovel.length + ' campo(s) na ficha do imovel');
+    if (imovelAtivo.length) partes.push(imovelAtivo.length + ' campo(s) na ficha do imovel');
     if (pendAto) partes.push(pendAto + ' pendencia(s) em ato(s)');
     if (errosAto) partes.push(errosAto + ' erro(s) de schema em ato(s)');
+    const sufixoIgn = ignoradas.length
+      ? ' ' + ignoradas.length + ' pendencia(s) ignorada(s), com o dado como esta na matricula.' : '';
 
     const status = el('div', { className: 'status ' + (partes.length ? 'bad' : 'ok') });
     const lista = partes.length > 1
       ? partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1]
       : partes[0];
-    status.textContent = partes.length
+    status.textContent = (partes.length
       ? r.arquivo.imoveis.length + ' ato(s) - ' + lista + ' a resolver.'
-      : 'Pronto para envio: ' + r.arquivo.imoveis.length + ' ato(s), 0 pendencia, 0 erro de schema.';
+      : 'Pronto para envio: ' + r.arquivo.imoveis.length + ' ato(s), 0 pendencia a resolver.')
+      + sufixoIgn;
     alvo.appendChild(status);
 
-    if (doImovel.imovel.length) {
+    if (imovelAtivo.length) {
       const d = el('details', { open: true });
-      d.appendChild(el('summary', { textContent: 'Dados do imovel - ' + doImovel.imovel.length
+      d.appendChild(el('summary', { textContent: 'Dados do imovel - ' + imovelAtivo.length
         + ' campo(s) a resolver (valem para todos os atos)' }));
       const ul = el('ul', { className: 'erros' });
-      for (const g of doImovel.imovel) {
-        ul.appendChild(linhaPendencia(g.campo, g.motivo, explicaAusente(g.campo)
-          + '. Corrija uma vez em "Dados do imovel": vale para os ' + g.atos + ' atos.'));
+      for (const g of imovelAtivo) {
+        const li = linhaPendencia(g.campo, g.motivo, explicaAusente(g.campo)
+          + '. Corrija uma vez em "Dados do imovel": vale para os ' + g.atos + ' atos.');
+        li.appendChild(caixaIgnorar('imovel', g.campo, g.motivo));
+        ul.appendChild(li);
       }
       d.appendChild(ul);
       alvo.appendChild(d);
@@ -1469,17 +1560,33 @@
       alvo.appendChild(d);
     }
 
-    for (const item of doImovel.porAto) {
+    for (const item of porAtoAtivo) {
       if (!item.pendencias.length && !item.avisos.length) continue;
       const d = el('details', { open: item.pendencias.length > 0 });
       d.appendChild(el('summary', { textContent: item.ato + ' - ' + item.pendencias.length
         + ' pendencia(s), ' + item.avisos.length + ' aviso(s)' }));
       const ul = el('ul', { className: 'erros' });
       for (const p of item.pendencias) {
-        ul.appendChild(linhaPendencia(p.campo, p.motivo, explicaAusente(p.campo)));
+        const li = linhaPendencia(p.campo, p.motivo, explicaAusente(p.campo));
+        li.appendChild(caixaIgnorar(item.ato, p.campo, p.motivo));
+        ul.appendChild(li);
       }
       for (const av of item.avisos) {
         ul.appendChild(linhaPendencia(av.campo, av.motivo, '', 'aviso-item'));
+      }
+      d.appendChild(ul);
+      alvo.appendChild(d);
+    }
+
+    if (ignoradas.length) {
+      const d = el('details', {});
+      d.appendChild(el('summary', { textContent: 'Pendencias ignoradas ('
+        + ignoradas.length + ') - o arquivo sai com o dado como esta na matricula' }));
+      const ul = el('ul', { className: 'erros' });
+      for (const g of ignoradas) {
+        const li = linhaPendencia(g.campo, g.motivo, ' [' + g.ato + ']', 'aviso-item');
+        li.appendChild(caixaIgnorar(g.ato === 'Dados do imovel' ? 'imovel' : g.ato, g.campo, g.motivo));
+        ul.appendChild(li);
       }
       d.appendChild(ul);
       alvo.appendChild(d);

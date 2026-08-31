@@ -170,6 +170,20 @@ Documentação de origem, fora do repositório:
    passa a ter a area total de 2,6925ha" e o dado mais atual da matricula - acima
    da descricao da abertura e do CCIR.
 
+34. **Quem faleceu deixa de ser proprietario, do ato SEGUINTE em diante.** O
+   obito averbado ainda nomeia o falecido (invariante 19), mas os atos posteriores
+   nao - na 7.676 o CPF invalido de 1978 reaparecia em 12 atos, e Joao Dias e
+   parte em 2. Os nomes saem de gatilhos escritos e sao comparados por igualdade
+   exata da chave (nunca "contem": um herdeiro homonimo do pai sairia da lista),
+   e **a remocao nunca esvazia a titularidade** - sem partilha o ESPOLIO e o
+   titular, e a abertura da 38.572 declara proprietario "O Espolio de Alcides
+   Saran".
+35. **Pendencia sem correcao possivel se ignora, nao se conserta.** Cada pendencia
+   tem caixa "ignorar" (`estado.ignoradas`): marcada, o dado vai como esta na
+   matricula e sai da contagem, para o bloco "Pendencias ignoradas". A validacao
+   nao muda - o sistema continua acusando; quem decide que nao ha o que fazer e o
+   escrevente. Decisao da serventia (31/08/2026), `docs/divergencias.md` 7.3.
+
 ## Estado atual
 
 Rural padrão e urbano padrão funcionam ponta a ponta (exemplos reais: matrículas
